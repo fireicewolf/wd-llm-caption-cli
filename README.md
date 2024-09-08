@@ -86,6 +86,28 @@ pip install -U -r requirements_huggingface.txt
 pip install -U -r requirements_modelscope.txt
 ```
 ## Simple usage
+Default will use both wd and joy caption to caption images,  
+Joy caption used Meta Llama 3.1 8B, on Hugging Face it is a gated models, so you need get access on Hugging Face first.  
+Then add `HF_TOKEN` to your environment variable.  
+
+Windows Powershell
+```shell
+$Env:HF_TOKEN="yourhftoken"
+```
+Windows CMD
+```shell
+set HF_TOKEN="yourhftoken"
+```
+Mac or Linux shell
+```shell
+export HF_TOKEN="yourhftoken"
+```
+In python script
+```python
+import os
+
+os.environ["HF_TOKEN"]="yourhftoken"
+```
 __Make sure your python venv has been activated first!__
 ```shell
 python caption.py your_datasets_path
