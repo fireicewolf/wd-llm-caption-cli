@@ -63,6 +63,219 @@ def get_caption_file_path(
         caption_file = Path(os.path.splitext(image_path)[0] + caption_extension)
     return caption_file
 
+
+class Llama:
+    def __init__(
+            self,
+            logger: Logger,
+            args: Namespace,
+            llm_path: Path,
+    ):
+        self.logger = logger
+        self.args = args
+        self.llm_path = llm_path
+        self.llm = None
+        self.llm_processor = None
+        # self.llm_tokenizer = None
+
+    def load_model(self):
+        if not os.path.exists(self.llm_path):
+            self.logger.error(f'{str(self.llm_path)} NOT FOUND!')
+            raise FileNotFoundError
+        # Import torch
+        try:
+            import torch
+            import torch.amp.autocast_mode
+            from torch import nn
+        except ImportError as ie:
+            self.logger.error(f'Import torch Failed!\nDetails: {ie}')
+            raise ImportError
+
+        # Import transformers
+        try:
+            from transformers import (AutoProcessor, AutoTokenizer,
+                                      BitsAndBytesConfig, MllamaForConditionalGeneration)
+        except ImportError as ie:
+            self.logger.error(f'Import transformers Failed!\nDetails: {ie}')
+            raise ImportError
+
+        # Load LLM
+        self.logger.info(f'Loading LLM `{self.args.llm_model_name}` with {"CPU" if self.args.llm_use_cpu else "GPU"}...')
+        start_time = time.monotonic()
+        llm_dtype = torch.float32 if self.args.llm_use_cpu else torch.float16 \
+            if self.args.llm_dtype == "fp16" else torch.bfloat16
+        self.logger.info(f'LLM dtype: {llm_dtype}')
+        if self.args.llm_qnt == "4bit":
+            qnt_config = BitsAndBytesConfig(load_in_4bit=True,
+                                            bnb_4bit_quant_type="nf4",
+                                            llm_int8_enable_fp32_cpu_offload=True,
+                                            bnb_4bit_compute_dtype=llm_dtype)
+            self.logger.info(f'LLM 4bit quantization: Enabled')
+        elif self.args.llm_qnt == "8bit":
+            qnt_config = BitsAndBytesConfig(load_in_8bit=True,
+                                            bnb_8bit_quant_type="int8",
+                                            llm_int8_enable_fp32_cpu_offload=True,
+                                            bnb_8bit_compute_dtype=llm_dtype)
+            self.logger.info(f'LLM 8bit quantization: Enabled')
+        else:
+            qnt_config = None
+        self.llm = MllamaForConditionalGeneration.from_pretrained(self.llm_path,
+                                                                  device_map="auto" if not self.args.llm_use_cpu else "cpu",
+                                                                  torch_dtype=llm_dtype if self.args.llm_qnt == "none" else None,
+                                                                  quantization_config=qnt_config)
+        self.llm.eval()
+        # self.llm_tokenizer = AutoTokenizer.from_pretrained(self.llm_path)
+        self.logger.info(f'LLM Loaded in {time.monotonic() - start_time:.1f}s.')
+
+        # Load processor
+        start_time = time.monotonic()
+        self.logger.info(f'Loading processor with {"CPU" if self.args.llm_use_cpu else "GPU"}...')
+        self.llm_processor = AutoProcessor.from_pretrained(self.llm_path)
+        self.logger.info(f'Processor Loaded in {time.monotonic() - start_time:.1f}s.')
+
+    def get_caption(
+            self,
+            image: Image.Image,
+            system_prompt: str,
+            user_prompt: str,
+            temperature: float = 0.5,
+            max_new_tokens: int = 512,
+    ) -> str:
+        # Import torch
+        try:
+            import torch
+            import torch.amp.autocast_mode
+        except ImportError as ie:
+            self.logger.error(f'Import torch Failed!\nDetails: {ie}')
+            raise ImportError
+
+        # Cleaning VRAM cache
+        if not self.args.llm_use_cpu:
+            self.logger.info(f'Will empty cuda device cache...')
+            torch.cuda.empty_cache()
+        if system_prompt is not None or system_prompt != "":
+            messages = [
+                {"role": "system", "content": f"{system_prompt}"},
+                {"role": "user", "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": f"{user_prompt}"}]
+                }
+            ]
+        else:
+            messages = [
+                {"role": "user", "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": f"{user_prompt}"}]
+                }
+            ]
+
+        self.logger.debug(f"\nChat_template:\n{messages}")
+
+        input_text = self.llm_processor.apply_chat_template(messages, add_generation_prompt=True)
+        inputs = self.llm_processor(image, input_text, return_tensors="pt").to(self.llm.device)
+
+        # Generate caption
+        self.logger.debug(f'LLM temperature is {temperature}')
+        self.logger.debug(f'LLM max_new_tokens is {max_new_tokens}')
+        # terminators = [
+        #     self.llm_tokenizer.eos_token_id,
+        #     self.llm_tokenizer.convert_tokens_to_ids("<|eot_id|>")
+        # ]
+        output = self.llm.generate(**inputs,
+                                   max_new_tokens=max_new_tokens,
+                                   # eos_token_id=terminators,
+                                   # do_sample=True, top_k=10,
+                                   temperature=temperature,
+                                   # suppress_tokens=None
+                                   )
+
+        content = self.llm_processor.decode(output[0][inputs["input_ids"].shape[-1]:])
+        content = content.rstrip("<|eot_id|>")
+
+        self.logger.debug(f'LLM Output:\n{content}')
+        content_list = str(content).split(".")
+        unique_content = list(dict.fromkeys(content_list))
+        unique_content = '.'.join(unique_content)
+        return unique_content
+
+    def inference(self):
+        image_paths = get_image_paths(logger=self.logger,path=Path(self.args.data_path),recursive=self.args.recursive)
+        system_prompt = str(self.args.llm_system_prompt)
+        pbar = tqdm(total=len(image_paths), smoothing=0.0)
+        for image_path in image_paths:
+            try:
+                pbar.set_description('Processing: {}'.format(image_path if len(image_path) <= 40 else
+                                                             image_path[:15]) + ' ... ' + image_path[-20:])
+                image = Image.open(image_path)
+                image = image_process(image, int(self.args.image_size))
+                self.logger.debug(f"Resized image shape: {image.shape}")
+                image = image_process_image(image)
+
+                # Change user prompt
+                if (self.args.caption_method == "wd+llama"
+                    and not self.args.llm_caption_without_wd
+                    and self.args.run_method == "queue") or (self.args.caption_method == "llama"
+                                                             and self.args.llm_read_wd_caption):
+                    wd_caption_file = get_caption_file_path(
+                        self.logger,
+                        data_path=self.args.data_path,
+                        image_path=Path(image_path),
+                        custom_caption_save_path=self.args.custom_caption_save_path,
+                        caption_extension=self.args.wd_caption_extension
+                    )
+                    self.logger.debug(f"Loading WD caption file: {wd_caption_file}")
+                    with open(wd_caption_file, "r", encoding="utf-8") as wcf:
+                        tag_text = wcf.read()
+                    user_prompt = str(self.args.llm_user_prompt).format(wd_tags=tag_text)
+                else:
+                    user_prompt = str(self.args.llm_user_prompt)
+
+                caption = self.get_caption(
+                    image=image,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    temperature=self.args.llm_temperature,
+                    max_new_tokens=self.args.llm_max_tokens
+                )
+                caption_file = get_caption_file_path(
+                    self.logger,
+                    data_path=self.args.data_path,
+                    image_path=Path(image_path),
+                    custom_caption_save_path=self.args.custom_caption_save_path,
+                    caption_extension=self.args.llm_caption_extension
+                )
+                if self.args.not_overwrite and os.path.isfile(caption_file):
+                    self.logger.warning(f'Caption file {caption_file} already exist! Skip this caption.')
+                    continue
+
+                with open(caption_file, "wt", encoding="utf-8") as f:
+                    f.write(caption + "\n")
+                self.logger.debug(f"Image path: {image_path}")
+                self.logger.debug(f"Caption path: {caption_file}")
+                self.logger.debug(f"Caption content: {caption}")
+
+            except Exception as e:
+                self.logger.error(f"Failed to caption image: {image_path}, skip it.\nerror info: {e}")
+                continue
+
+            pbar.update(1)
+
+        pbar.close()
+
+    def unload_model(self) -> bool:
+        image_adapter_unloaded = llm_unloaded = clip_model_unloaded = False
+        # Unload LLM
+        if self.llm is not None:
+            self.logger.info(f'Unloading LLM...')
+            start = time.monotonic()
+            del self.llm
+            del self.llm_processor
+            del self.llm_tokenizer
+            self.logger.info(f'LLM unloaded in {time.monotonic() - start:.1f}s.')
+            llm_unloaded = True
+
+        return image_adapter_unloaded and llm_unloaded and clip_model_unloaded
+
 class Joy:
     def __init__(
             self,
@@ -121,9 +334,9 @@ class Joy:
                 x = self.activation(x)
                 x = self.linear2(x)
                 return x
-        device = "cpu" if self.args.joy_use_cpu else "cuda"
+        device = "cpu" if self.args.llm_use_cpu else "cuda"
         # Load CLIP
-        self.logger.info(f'Loading CLIP with {"CPU" if self.args.joy_use_cpu else "GPU"}...')
+        self.logger.info(f'Loading CLIP with {"CPU" if self.args.llm_use_cpu else "GPU"}...')
         start_time = time.monotonic()
         self.clip_processor = AutoProcessor.from_pretrained(self.clip_path)
         self.clip_model = AutoModel.from_pretrained(self.clip_path)
@@ -134,36 +347,38 @@ class Joy:
         self.logger.info(f'CLIP Loaded in {time.monotonic() - start_time:.1f}s.')
 
         # Load LLM
-        self.logger.info(f'Loading LLM with {"CPU" if self.args.joy_use_cpu else "GPU"}...')
+        self.logger.info(f'Loading LLM with {"CPU" if self.args.llm_use_cpu else "GPU"}...')
         start_time = time.monotonic()
         self.llm_tokenizer = AutoTokenizer.from_pretrained(self.llm_path, use_fast=False, trust_remote_code=True)
         assert (isinstance(self.llm_tokenizer, PreTrainedTokenizer) or
                 isinstance(self.llm_tokenizer, PreTrainedTokenizerFast)), \
             f"Tokenizer is of type {type(self.llm_tokenizer)}"
-        llm_dtype = torch.float32 if self.args.joy_use_cpu else torch.float16 \
-            if self.args.joy_llm_dtype == "fp16" else torch.bfloat16
+        llm_dtype = torch.float32 if self.args.llm_use_cpu else torch.float16 \
+            if self.args.llm_dtype == "fp16" else torch.bfloat16
         self.logger.info(f'Joy LLM dtype: {llm_dtype}')
-        if self.args.joy_llm_qnt == "4bit":
+        if self.args.llm_qnt == "4bit":
             qnt_config = BitsAndBytesConfig(load_in_4bit=True,
+                                            bnb_4bit_quant_type="nf4",
                                             llm_int8_enable_fp32_cpu_offload=True,
                                             bnb_4bit_compute_dtype=llm_dtype)
-            self.logger.info(f'Joy LLM 4bit quantization: Enabled')
-        elif self.args.joy_llm_qnt == "8bit":
+            self.logger.info(f'LLM 4bit quantization: Enabled')
+        elif self.args.llm_qnt == "8bit":
             qnt_config = BitsAndBytesConfig(load_in_8bit=True,
+                                            bnb_8bit_quant_type="int8",
                                             llm_int8_enable_fp32_cpu_offload=True,
-                                             bnb_4bit_compute_dtype=llm_dtype)
-            self.logger.info(f'Joy LLM 8bit quantization: Enabled')
+                                            bnb_8bit_compute_dtype=llm_dtype)
+            self.logger.info(f'LLM 8bit quantization: Enabled')
         else:
             qnt_config = None
         self.llm = AutoModelForCausalLM.from_pretrained(self.llm_path,
-                                                        device_map="auto" if not self.args.joy_use_cpu else "cpu",
-                                                        torch_dtype=llm_dtype if self.args.joy_llm_qnt == "none" else None,
+                                                        device_map="auto" if not self.args.llm_use_cpu else "cpu",
+                                                        torch_dtype=llm_dtype if self.args.llm_qnt == "none" else None,
                                                         quantization_config=qnt_config)
         self.llm.eval()
         self.logger.info(f'LLM Loaded in {time.monotonic() - start_time:.1f}s.')
 
         # Load Image Adapter
-        self.logger.info(f'Loading Image Adapter with {"CPU" if self.args.joy_use_cpu else "GPU"}...')
+        self.logger.info(f'Loading Image Adapter with {"CPU" if self.args.llm_use_cpu else "GPU"}...')
         start_time = time.monotonic()
         self.image_adapter = ImageAdapter(self.clip_model.config.hidden_size, self.llm.config.hidden_size)
         self.image_adapter.load_state_dict(torch.load(self.image_adapter_path, map_location="cpu"))
@@ -185,9 +400,9 @@ class Joy:
         except ImportError as ie:
             self.logger.error(f'Import torch Failed!\nDetails: {ie}')
             raise ImportError
-        device = "cpu" if self.args.joy_use_cpu else "cuda"
+        device = "cpu" if self.args.llm_use_cpu else "cuda"
         # Cleaning VRAM cache
-        if not self.args.joy_use_cpu:
+        if not self.args.llm_use_cpu:
             self.logger.info(f'Will empty cuda device cache...')
             torch.cuda.empty_cache()
         # Preprocess image
@@ -267,10 +482,10 @@ class Joy:
                 image = image_process_image(image)
 
                 # Change user prompt
-                if (self.args.caption_method == "both"
-                    and not self.args.joy_caption_without_wd
+                if (self.args.caption_method == "wd+joy"
+                    and not self.args.llm_caption_without_wd
                     and self.args.run_method == "queue") or (self.args.caption_method == "joy"
-                                                             and self.args.joy_read_wd_caption):
+                                                             and self.args.llm_read_wd_caption):
                     wd_caption_file = get_caption_file_path(
                         self.logger,
                         data_path=self.args.data_path,
@@ -281,22 +496,22 @@ class Joy:
                     self.logger.debug(f"Loading WD caption file: {wd_caption_file}")
                     with open(wd_caption_file, "r", encoding="utf-8") as wcf:
                         tag_text = wcf.read()
-                    user_prompt = str(self.args.joy_user_prompt).format(wd_tags=tag_text)
+                    user_prompt = str(self.args.llm_user_prompt).format(wd_tags=tag_text)
                 else:
-                    user_prompt = str(self.args.joy_user_prompt)
+                    user_prompt = str(self.args.llm_user_prompt)
 
                 caption = self.get_caption(
                     image=image,
                     user_prompt=user_prompt,
-                    temperature=self.args.joy_temperature,
-                    max_new_tokens=self.args.joy_max_tokens
+                    temperature=self.args.llm_temperature,
+                    max_new_tokens=self.args.llm_max_tokens
                 )
                 caption_file = get_caption_file_path(
                     self.logger,
                     data_path=self.args.data_path,
                     image_path=Path(image_path),
                     custom_caption_save_path=self.args.custom_caption_save_path,
-                    caption_extension=self.args.joy_caption_extension
+                    caption_extension=self.args.llm_caption_extension
                 )
                 if self.args.not_overwrite and os.path.isfile(caption_file):
                     self.logger.warning(f'Caption file {caption_file} already exist! Skip this caption.')
