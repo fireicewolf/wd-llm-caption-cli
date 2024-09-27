@@ -1,23 +1,23 @@
 import base64
 import glob
 import os
+from io import BytesIO
 from pathlib import Path
 from typing import List
 
 import cv2
 import numpy
-from io import BytesIO
 from PIL import Image
 
 from utils.logger import Logger
 
-SUPPORT_IMAGE_FORMATS = ("bmp", "jpg", "jpeg", "png","webp")
+SUPPORT_IMAGE_FORMATS = ("bmp", "jpg", "jpeg", "png", "webp")
 
 
 def get_image_paths(
-        logger:Logger,
-        path:Path,
-        recursive:bool = False,
+        logger: Logger,
+        path: Path,
+        recursive: bool = False,
 ) -> List[str]:
     # Get image paths
     path_to_find = os.path.join(path, '**') if recursive else os.path.join(path, '*')
@@ -35,6 +35,7 @@ def get_image_paths(
 
     logger.info(f'Found {len(image_paths)} image(s).')
     return image_paths
+
 
 def image_process(image: Image.Image, target_size: int) -> numpy.ndarray:
     # make alpha to white
@@ -84,10 +85,12 @@ def image_process(image: Image.Image, target_size: int) -> numpy.ndarray:
 
     return padded_image
 
+
 def image_process_image(
         padded_image: numpy.ndarray
 ) -> Image.Image:
     return Image.fromarray(padded_image)
+
 
 def image_process_gbr(
         padded_image: numpy.ndarray
@@ -96,6 +99,7 @@ def image_process_gbr(
     padded_image = padded_image[:, :, ::-1]
     padded_image = padded_image.astype(numpy.float32)
     return padded_image
+
 
 def encode_image_to_base64(image: Image.Image):
     with BytesIO() as bytes_output:
