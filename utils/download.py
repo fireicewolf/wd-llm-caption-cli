@@ -1,9 +1,8 @@
 import argparse
 import json
 import os
-import shutil
 from pathlib import Path
-from typing import Union, Optional, Any
+from typing import Union, Optional
 
 import requests
 from tqdm import tqdm
@@ -52,7 +51,7 @@ def url_download(
 
     if not force_download and os.path.isfile(local_file):
         if os.path.exists(local_file) and skip_local_file_exist:
-           logger.info(f"`skip_local_file_exist` is Enable, Skipping download {local_file}...")
+            logger.info(f"`skip_local_file_exist` is Enable, Skipping download {local_file}...")
         else:
             if total_size == 0:
                 logger.info(
@@ -69,12 +68,14 @@ def url_download(
 
     return Path(os.path.join(local_dir, filename))
 
-def download_wd(
+
+def download_models(
         logger: Logger,
+        models_type: str,
         args: argparse.Namespace,
         config_file: Path,
         models_save_path: Path,
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path] | tuple[Path, Path, Path] | Path:
     if os.path.isfile(config_file):
         logger.info(f'Using config: {str(config_file)}')
     else:
@@ -84,180 +85,22 @@ def download_wd(
     def read_json(config_file) -> tuple[str, dict[str]]:
         with open(config_file, 'r', encoding='utf-8') as config_json:
             datas = json.load(config_json)
-            model_name = list(datas.keys())[0] if args.wd_model_name is None else args.wd_model_name
-            if model_name not in datas.keys():
-                logger.error(f'"{str(model_name)}" NOT FOUND IN CONFIG!')
-                raise FileNotFoundError
-            return model_name, datas[model_name]
-
-    model_name, model_info = read_json(config_file)
-    args.wd_model_name = model_name
-    models_save_path = Path(os.path.join(models_save_path, model_name))
-
-    if args.use_sdk_cache:
-        logger.warning('use_sdk_cache ENABLED! download_method force to use "SDK" and models_save_path will be ignored')
-        args.download_method = 'sdk'
-    else:
-        logger.info(f'Model and csv will be stored in {str(models_save_path)}.')
-
-    def download_choice(
-            model_info: dict[str],
-            model_site: str,
-            models_save_path: Path,
-            download_method: str = "sdk",
-            use_sdk_cache: bool = False,
-            skip_local_file_exist: bool = True,
-            force_download: bool = False
-    ):
-        if download_method.lower() == 'sdk':
-            if model_site == "huggingface":
-                model_hf_info = model_info["huggingface"]
-                try:
-                    from huggingface_hub import hf_hub_download
-                    repo_id = model_hf_info["repo_id"]
-
-                    logger.info(f'Will download onnx model from Huggingface repo: {repo_id}')
-                    model_path = hf_hub_download(
-                        repo_id=repo_id,
-                        filename=model_hf_info["onnx"],
-                        revision=model_hf_info["revision"],
-                        local_dir=models_save_path if not use_sdk_cache else None,
-                        local_files_only=skip_local_file_exist \
-                            if os.path.exists(os.path.join(models_save_path, model_hf_info["onnx"])) else False,
-                        # local_dir_use_symlinks=False if not use_sdk_cache else "auto",
-                        # resume_download=True,
-                        force_download=force_download
-                    )
-                    logger.info(f'Will download tags csv from Huggingface repo: {repo_id}')
-                    tags_csv_path = hf_hub_download(
-                        repo_id=repo_id,
-                        filename=model_hf_info["csv"],
-                        revision=model_hf_info["revision"],
-                        local_dir=models_save_path if not use_sdk_cache else None,
-                        local_files_only=skip_local_file_exist \
-                            if os.path.exists(os.path.join(models_save_path, model_hf_info["csv"])) else False,
-                        # local_dir_use_symlinks=False if not use_sdk_cache else "auto",
-                        # resume_download=True,
-                        force_download=force_download
-                    )
-                except:
-                    logger.warning('huggingface_hub not installed or download via it failed, '
-                                   'retrying with URL method to download...')
-                    model_path, tags_csv_path = download_choice(
-                        model_info,
-                        model_site,
-                        models_save_path,
-                        use_sdk_cache=False,
-                        download_method="url",
-                        skip_local_file_exist=skip_local_file_exist,
-                        force_download=force_download
-                    )
-                    return model_path, tags_csv_path
-
-            elif model_site == "modelscope":
-                model_ms_info = model_info["modelscope"]
-                try:
-                    if force_download:
-                        logger.warning('Modelscope api not support force download, '
-                                       'trying to remove model path before download!')
-                        shutil.rmtree(models_save_path)
-
-                    from modelscope.hub.file_download import model_file_download
-                    repo_id = model_ms_info["repo_id"]
-
-                    logger.info(f'Will download onnx model from Modelscope repo: {repo_id}')
-                    model_path = model_file_download(
-                        model_id=repo_id,
-                        file_path=model_ms_info["onnx"],
-                        revision=model_ms_info["revision"],
-                        local_files_only=skip_local_file_exist,
-                        local_dir=models_save_path if not use_sdk_cache else None,
-                    )
-                    logger.info(f'Will download onnx model from Modelscope repo: {repo_id}')
-                    tags_csv_path = model_file_download(
-                        model_id=repo_id,
-                        file_path=model_ms_info["csv"],
-                        revision=model_ms_info["revision"],
-                        local_files_only=skip_local_file_exist,
-                        local_dir=models_save_path if not use_sdk_cache else None,
-                    )
-                except:
-                    logger.warning('modelscope not installed or download via it failed, '
-                                   'retrying with URL method to download...')
-                    model_path, tags_csv_path = download_choice(
-                        model_info,
-                        model_site,
-                        models_save_path,
-                        use_sdk_cache=False,
-                        download_method="url",
-                        skip_local_file_exist=skip_local_file_exist,
-                        force_download=force_download
-                    )
-                    return model_path, tags_csv_path
+            if models_type == "wd":
+                model_name = list(datas.keys())[0] if args.wd_model_name is None else args.wd_model_name
+                args.wd_model_name = model_name
+            elif models_type in ["joy", "llama"]:
+                model_name = list(datas.keys())[0] if args.llm_model_name is None else args.llm_model_name
+                args.llm_model_name = model_name
             else:
-                logger.error('Invalid model site!')
+                logger.error("Invalid model type!")
                 raise ValueError
 
-        else:
-            onnx_url = model_info[model_site]["onnx_url"]
-            csv_url = model_info[model_site]["csv_url"]
-
-            logger.info(f'Will download onnx model from url: {onnx_url}')
-            model_path = url_download(
-                logger=logger,
-                url=onnx_url,
-                local_dir=models_save_path,
-                force_filename=model_info[model_site]["onnx"],
-                skip_local_file_exist=skip_local_file_exist,
-                force_download=force_download
-            )
-            logger.info(f'Will download tags csv from url: {csv_url}')
-            tags_csv_path = url_download(
-                logger=logger,
-                url=csv_url,
-                local_dir=models_save_path,
-                force_filename=model_info[model_site]["csv"],
-                skip_local_file_exist=skip_local_file_exist,
-                force_download=force_download
-            )
-
-        return model_path, tags_csv_path
-
-    model_path, tags_csv_path = download_choice(
-        model_info=model_info,
-        model_site=str(args.model_site),
-        models_save_path=Path(models_save_path),
-        download_method=str(args.download_method).lower(),
-        use_sdk_cache=args.use_sdk_cache,
-        skip_local_file_exist=args.skip_download,
-        force_download=args.force_download
-    )
-
-    return Path(model_path), Path(tags_csv_path)
-
-def download_llm(
-        logger: Logger,
-        args: argparse.Namespace,
-        config_file: Path,
-        models_save_path: Path,
-) -> tuple[Any]:
-    if os.path.isfile(config_file):
-        logger.info(f'Using config: {str(config_file)}')
-    else:
-        logger.error(f'{str(config_file)} NOT FOUND!')
-        raise FileNotFoundError
-
-    def read_json(config_file) -> tuple[str, dict[str]]:
-        with open(config_file, 'r', encoding='utf-8') as config_json:
-            datas = json.load(config_json)
-            model_name = list(datas.keys())[0] if args.llm_model_name is None else args.llm_model_name
             if model_name not in datas.keys():
                 logger.error(f'"{str(model_name)}" NOT FOUND IN CONFIG!')
                 raise FileNotFoundError
             return model_name, datas[model_name]
 
     model_name, model_info = read_json(config_file)
-    args.llm_model_name = model_name
     models_save_path = Path(os.path.join(models_save_path, model_name))
 
     if args.use_sdk_cache:
@@ -275,18 +118,19 @@ def download_llm(
             skip_local_file_exist: bool = True,
             force_download: bool = False
     ):
-        if model_site not in ["huggingface","modelscope"]:
+        if model_site not in ["huggingface", "modelscope"]:
             logger.error('Invalid model site!')
             raise ValueError
 
         model_site_info = model_info[model_site]
         try:
-            if model_site == "huggingface":
-                from huggingface_hub import hf_hub_download
-            elif model_site == "modelscope":
-                from modelscope.hub.file_download import model_file_download
+            if download_method == "sdk":
+                if model_site == "huggingface":
+                    from huggingface_hub import hf_hub_download
+                elif model_site == "modelscope":
+                    from modelscope.hub.file_download import model_file_download
 
-        except:
+        except ModuleNotFoundError:
             if model_site == "huggingface":
                 logger.warning('huggingface_hub not installed or download via it failed, '
                                'retrying with URL method to download...')
@@ -361,4 +205,20 @@ def download_llm(
         skip_local_file_exist=args.skip_download,
         force_download=args.force_download
     )
-    return models_path
+
+    if models_type == "wd":
+        models_path = os.path.dirname(models_path[0])
+        wd_model_path = Path(os.path.join(models_path, "model.onnx"))
+        if os.path.isfile(os.path.join(models_path, "selected_tags.csv")):
+            wd_tags_csv_path = Path(os.path.join(models_path, "selected_tags.csv"))
+        else:
+            wd_tags_csv_path = Path(os.path.join(models_path, "tags-selected.csv"))
+        return wd_model_path, wd_tags_csv_path
+    elif models_type == "joy":
+        image_adapter_path = Path(models_path[0])
+        clip_path = Path(os.path.dirname(models_path[1]))
+        llm_path = Path(os.path.dirname(models_path[2]))
+        return image_adapter_path, clip_path, llm_path
+    elif models_type == "llama":
+        llm_path = Path(os.path.dirname(models_path[0]))
+        return llm_path
