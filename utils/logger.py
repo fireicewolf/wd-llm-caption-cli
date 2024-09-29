@@ -16,7 +16,7 @@ class Logger:
         console_handler.setFormatter(formatter)
         self.logger.addHandler(console_handler)
 
-        if log_file is not None:
+        if log_file:
             file_handler = handlers.TimedRotatingFileHandler(filename=log_file,
                                                              when='D',
                                                              interval=1,

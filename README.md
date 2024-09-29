@@ -9,6 +9,11 @@ and [LLama3.2 Vision Instruct](https://huggingface.co/meta-llama/Llama-3.2-11B-V
 If you want to caption a training datasets for Image generation model(Stable Diffusion, Flux, Kolors or others)
 This tool can make a caption with danbooru style tags or a nature language description.
 
+### New Changes:
+#### 2024.09.30: A simple gui run through gradio now😊
+
+<img alt="DEMO_her.jpg" src="DEMO/DEMO_GUI.png" width="300"/>
+
 ## Example
 
 <img alt="DEMO_her.jpg" src="DEMO/DEMO_her.jpg" width="300" height="400"/>
@@ -104,10 +109,6 @@ place).
 | Llama-3.2-11B-Vision-Instruct | [Hugging Face](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision-Instruct) | [ModelScope](https://www.modelscope.cn/models/fireicewolf/Llama-3.2-11B-Vision-Instruct) |
 | Llama-3.2-90B-Vision-Instruct | [Hugging Face](https://huggingface.co/meta-llama/Llama-3.2-90B-Vision-Instruct) | [ModelScope](https://www.modelscope.cn/models/fireicewolf/Llama-3.2-90B-Vision-Instruct) |
 
-## TO-DO
-
-make a simple ui by Jupyter widget(When my lazy cancer cured😊)
-
 ## Installation
 
 Python 3.10 works fine.
@@ -125,18 +126,19 @@ python -m venv .venv
 
 # Install torch
 # Install torch base on your GPU driver. e.g.
-pip install torch==2.4.0 --index-url https://download.pytorch.org/whl/cu124
+pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cu124
  
 # Base dependencies, models for inference will download via python request libs.
 # For WD Caption
 pip install -U -r requirements_wd.txt
+
 # If you want load WD models with GPU.
 # For CUDA 11.8
 pip install -U -r requirements_onnx_cu118.txt
 # For CUDA 12.X
 pip install -U -r requirements_onnx_cu12x.txt
 
-# For Joy Caption
+# For Joy Caption or Llama 3.2 Vision Instruct
 pip install -U -r requirements_llm.txt
 
 # If you want to download or cache model via huggingface hub, install this.
@@ -144,9 +146,31 @@ pip install -U -r requirements_huggingface.txt
 
 # If you want to download or cache model via modelscope hub, install this.
 pip install -U -r requirements_modelscope.txt
+
+# If you want to run in gui model
+pip install -U -r requirements_gui.txt
 ```
 
-## Simple usage
+## GUI Usage
+
+```shell
+python gui.py
+```
+### GUI options
+
+`--port`  
+gradio webui port, default is `8282`  
+`--listen`  
+allow gradio remote connections  
+`--share`  
+allow gradio share  
+`--inbrowser`
+auto open in browser  
+`--log_level`  
+set log level [`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`],  
+default is `INFO`
+
+## CLI Simple Usage
 
 Default will use both wd and llm caption to caption images,  
 Llama-3.2-11B-Vision-Instruct on Hugging Face is a gated models.  
@@ -183,7 +207,7 @@ os.environ["HF_TOKEN"]="yourhftoken"
 __Make sure your python venv has been activated first!__
 
 ```shell
-python caption.py your_datasets_path
+python caption.py --data_path your_datasets_path
 ```
 
 To run with more options, You can find help by run with this or see at [Options](#options)
@@ -192,11 +216,12 @@ To run with more options, You can find help by run with this or see at [Options]
 python caption.py -h
 ```
 
-## <span id="options">Options</span>
+### <span id="options">Options</span>
 
 <details>
     <summary>Advance options</summary>
-`data_path`
+
+`--data_path`
 
 path where your datasets place
 

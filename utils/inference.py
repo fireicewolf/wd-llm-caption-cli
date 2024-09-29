@@ -51,7 +51,7 @@ def get_caption_file_path(
         custom_caption_save_path: Path,
         caption_extension: str,
 ) -> Path:
-    if custom_caption_save_path is not None:
+    if custom_caption_save_path:
         if not os.path.exists(custom_caption_save_path):
             logger.warning(f'{custom_caption_save_path} NOT FOUND! Will create it...')
             os.makedirs(custom_caption_save_path, exist_ok=True)
@@ -120,14 +120,12 @@ class Llama:
         if self.args.llm_qnt == "4bit":
             qnt_config = BitsAndBytesConfig(load_in_4bit=True,
                                             bnb_4bit_quant_type="nf4",
-                                            llm_int8_enable_fp32_cpu_offload=True,
-                                            bnb_4bit_compute_dtype=llm_dtype)
+                                            bnb_4bit_compute_dtype=llm_dtype,
+                                            bnb_4bit_use_double_quant=True)
             self.logger.info(f'LLM 4bit quantization: Enabled')
         elif self.args.llm_qnt == "8bit":
             qnt_config = BitsAndBytesConfig(load_in_8bit=True,
-                                            bnb_8bit_quant_type="int8",
-                                            llm_int8_enable_fp32_cpu_offload=True,
-                                            bnb_8bit_compute_dtype=llm_dtype)
+                                            llm_int8_enable_fp32_cpu_offload=True)
             self.logger.info(f'LLM 8bit quantization: Enabled')
         else:
             qnt_config = None
@@ -165,7 +163,7 @@ class Llama:
         if not self.args.llm_use_cpu:
             self.logger.info(f'Will empty cuda device cache...')
             torch.cuda.empty_cache()
-        if system_prompt is not None or system_prompt != "":
+        if system_prompt:
             messages = [
                 {"role": "system", "content": f"{system_prompt}"},
                 {"role": "user", "content": [
@@ -290,7 +288,7 @@ class Llama:
     def unload_model(self) -> bool:
         image_adapter_unloaded = llm_unloaded = clip_model_unloaded = False
         # Unload LLM
-        if self.llm is not None:
+        if self.llm:
             self.logger.info(f'Unloading LLM...')
             start = time.monotonic()
             del self.llm
@@ -386,14 +384,12 @@ class Joy:
         if self.args.llm_qnt == "4bit":
             qnt_config = BitsAndBytesConfig(load_in_4bit=True,
                                             bnb_4bit_quant_type="nf4",
-                                            llm_int8_enable_fp32_cpu_offload=True,
-                                            bnb_4bit_compute_dtype=llm_dtype)
+                                            bnb_4bit_compute_dtype=llm_dtype,
+                                            bnb_4bit_use_double_quant=True)
             self.logger.info(f'LLM 4bit quantization: Enabled')
         elif self.args.llm_qnt == "8bit":
             qnt_config = BitsAndBytesConfig(load_in_8bit=True,
-                                            bnb_8bit_quant_type="int8",
-                                            llm_int8_enable_fp32_cpu_offload=True,
-                                            bnb_8bit_compute_dtype=llm_dtype)
+                                            llm_int8_enable_fp32_cpu_offload=True)
             self.logger.info(f'LLM 8bit quantization: Enabled')
         else:
             qnt_config = None
@@ -572,14 +568,14 @@ class Joy:
     def unload_model(self) -> bool:
         image_adapter_unloaded = llm_unloaded = clip_model_unloaded = False
         # Unload Image Adapter
-        if self.image_adapter is not None:
+        if self.image_adapter:
             self.logger.info(f'Unloading Image Adapter...')
             start = time.monotonic()
             del self.image_adapter
             self.logger.info(f'Image Adapter unloaded in {time.monotonic() - start:.1f}s.')
             image_adapter_unloaded = True
         # Unload LLM
-        if self.llm is not None:
+        if self.llm:
             self.logger.info(f'Unloading LLM...')
             start = time.monotonic()
             del self.llm
@@ -587,7 +583,7 @@ class Joy:
             self.logger.info(f'LLM unloaded in {time.monotonic() - start:.1f}s.')
             llm_unloaded = True
         # Unload CLIP
-        if self.clip_model is not None:
+        if self.clip_model:
             self.logger.info(f'Unloading CLIP...')
             start = time.monotonic()
             del self.clip_model
@@ -668,6 +664,10 @@ class Tagger:
         self.model_shape_size = self.ort_infer_sess.get_inputs()[0].shape[1]
         self.logger.debug(f'"{self.args.wd_model_name}" target shape is {self.model_shape_size}')
 
+    def get_tags(
+            self,
+            image: numpy.ndarray
+    ) -> tuple[str, str, str, str]:
         tags_csv_path = self.tags_csv_path
         if not os.path.exists(tags_csv_path):
             self.logger.error(f'{str(tags_csv_path)} NOT FOUND!')
@@ -725,7 +725,7 @@ class Tagger:
             general_tags = [tag.replace("_", " ") if len(tag) > 3 and tag not in kaomojis else tag for tag in
                             general_tags]
 
-        if self.args.wd_tag_replacement is not None:
+        if self.args.wd_tag_replacement:
             # escape , and ; in tag_replacement: wd14 tag names may contain , and ;
             escaped_tag_replacements = self.args.wd_tag_replacement.replace("\\,", "@@@@").replace("\\;", "####")
             tag_replacements = escaped_tag_replacements.split(";")
@@ -750,26 +750,13 @@ class Tagger:
                 elif source in rating_tags and self.args.wd_model_name.lower().startswith("wd"):
                     rating_tags[rating_tags.index(source)] = target
 
-        self.rating_tags = rating_tags
-        self.character_tags = character_tags
-        self.general_tags = general_tags
-
-    def get_tags(
-            self,
-            image: numpy.ndarray
-    ) -> tuple[str, str, str, str]:
-
-        rating_tags = self.rating_tags
-        character_tags = self.character_tags
-        general_tags = self.general_tags
-
         caption_separator = self.args.wd_caption_separator
         stripped_caption_separator = caption_separator.strip()
         undesired_tags = self.args.wd_undesired_tags.split(stripped_caption_separator)
         undesired_tags = set([tag.strip() for tag in undesired_tags if tag.strip() != ""])
 
         always_first_tags = [tag for tag in self.args.wd_always_first_tags.split(stripped_caption_separator)
-                             if tag.strip() != ""] if self.args.wd_always_first_tags is not None else None
+                             if tag.strip() != ""] if self.args.wd_always_first_tags else None
 
         input_name = self.ort_infer_sess.get_inputs()[0].name
         label_name = self.ort_infer_sess.get_outputs()[0].name
@@ -798,11 +785,11 @@ class Tagger:
             self.args.wd_character_threshold = None
 
         self.logger.debug(f'threshold: {self.args.wd_threshold}') \
-            if self.args.wd_general_threshold is None and self.args.wd_character_threshold is None else None
+            if not self.args.wd_general_threshold and not self.args.wd_character_threshold else None
         self.logger.debug(f'General threshold: {self.args.wd_general_threshold}') \
-            if self.args.wd_general_threshold is not None else None
+            if self.args.wd_general_threshold else None
         self.logger.debug(f'Character threshold: {self.args.wd_character_threshold}') \
-            if self.args.wd_character_threshold is not None else None
+            if self.args.wd_character_threshold else None
 
         # Set general_threshold and character_threshold to general_threshold if not they are not set
         self.args.wd_general_threshold = self.args.wd_threshold if self.args.wd_general_threshold is None else self.args.wd_general_threshold
@@ -847,8 +834,8 @@ class Tagger:
                     general_tag_text += caption_separator + tag_name
                     combined_tags.append(tag_name)
 
-            elif (self.args.wd_character_threshold is not None
-                  and i >= len(general_tags) and p >= self.args.wd_character_threshold):
+            elif (self.args.wd_character_threshold and i >= len(
+                    general_tags) and p >= self.args.wd_character_threshold):
                 tag_name = character_tags[i - len(general_tags)]
 
                 if tag_name not in undesired_tags:
@@ -882,7 +869,7 @@ class Tagger:
                 self.logger.warning(f"{self.args.wd_model_name} doesn't support rating tags.")
 
         # Always put some tags at the beginning
-        if always_first_tags is not None:
+        if always_first_tags:
             for tag in always_first_tags:
                 if tag in combined_tags:
                     combined_tags.remove(tag)
@@ -957,15 +944,15 @@ class Tagger:
 
     def unload_model(self) -> bool:
         unloaded = False
-        if self.ort_infer_sess is not None:
+        if self.ort_infer_sess:
             self.logger.info(f'Unloading model {self.args.wd_model_name}...')
             start = time.monotonic()
             del self.ort_infer_sess
-            if self.rating_tags is not None:
+            if self.rating_tags:
                 del self.rating_tags
-            if self.character_tags is not None:
+            if self.character_tags:
                 del self.character_tags
-            if self.general_tags is not None:
+            if self.general_tags:
                 del self.general_tags
             self.logger.info(f'{self.args.wd_model_name} unloaded in {time.monotonic() - start:.1f}s.')
             del self.model_path

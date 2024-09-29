@@ -19,10 +19,11 @@ class Caption:
             args: argparse.Namespace
     ):
         # Set flags
-
         self.use_wd = True if args.caption_method in ["wd+joy", "wd+llama", "wd"] else False
         self.use_joy = True if args.caption_method in ["wd+joy", "joy"] else False
         self.use_llama = True if args.caption_method in ["wd+llama", "llama"] else False
+
+        self.my_logger = None
 
         self.wd_model_path = None
         self.wd_tags_csv_path = None
@@ -324,8 +325,9 @@ def setup_args() -> argparse.Namespace:
     args = argparse.ArgumentParser()
     base_args = args.add_argument_group("Base")
     base_args.add_argument(
-        'data_path',
+        '--data_path',
         type=str,
+        default='DEMO/DEMO_her.jpg',
         help='path for data.'
     )
     base_args.add_argument(
@@ -602,6 +604,12 @@ def setup_args() -> argparse.Namespace:
         default=None,
         help='custom caption file save path.'
     )
+
+    gradio_args = args.add_argument_group("Gradio dummy args")
+    gradio_args.add_argument('--port', type=int, default="8282", help="port, default is `8282`")
+    gradio_args.add_argument('--listen', action='store_true', help="allow remote connections")
+    gradio_args.add_argument('--share', action='store_true', help="allow gradio share")
+    gradio_args.add_argument('--inbrowser', action='store_true', help="auto open in browser")
 
     return args.parse_args()
 
