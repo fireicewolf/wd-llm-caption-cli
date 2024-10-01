@@ -1,5 +1,6 @@
 import argparse
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -33,6 +34,7 @@ class Caption:
         self.llm_path = None
 
         self.llama_path = None
+        self.llama_patch_path = None
 
         self.my_tagger = None
         self.my_joy = None
@@ -125,13 +127,22 @@ class Caption:
                 llm_config_file = Path(args.llm_config)
 
             # Download joy models
-            self.llama_path = download_models(
-                logger=self.my_logger,
-                models_type="llama",
-                args=args,
-                config_file=llm_config_file,
-                models_save_path=models_save_path,
-            )
+            if args.llm_patch:
+                self.llama_path, self.llama_patch_path = download_models(
+                    logger=self.my_logger,
+                    models_type="llama",
+                    args=args,
+                    config_file=llm_config_file,
+                    models_save_path=models_save_path,
+                )
+            else:
+                self.llama_path = download_models(
+                    logger=self.my_logger,
+                    models_type="llama",
+                    args=args,
+                    config_file=llm_config_file,
+                    models_save_path=models_save_path,
+                )
 
     def load_models(
             self,
@@ -163,6 +174,7 @@ class Caption:
                 logger=self.my_logger,
                 args=args,
                 llm_path=self.llama_path,
+                llama_patch_path=self.llama_patch_path if args.llm_patch and self.llama_patch_path else None
             )
             self.my_llama.load_model()
 
@@ -170,6 +182,7 @@ class Caption:
             self,
             args: argparse.Namespace,
     ):
+        start_inference_time = time.monotonic()
         # Inference
         if self.use_wd and (self.use_joy or self.use_llama):
             # Set joy user prompt
@@ -308,6 +321,19 @@ class Caption:
                 self.my_joy.inference()
             elif not self.use_joy and self.use_llama:
                 self.my_llama.inference()
+
+        total_inference_time = time.monotonic() - start_inference_time
+        days = total_inference_time // (24 * 3600)
+        total_inference_time %= (24 * 3600)
+        hours = total_inference_time // 3600
+        total_inference_time %= 3600
+        minutes = total_inference_time // 60
+        seconds = total_inference_time % 60
+        days = f"{days} Day(s) " if days > 0 else ""
+        hours = f"{hours} Hour(s) " if hours > 0 or (days and hours == 0) else ""
+        minutes = f"{minutes} Min(s) " if minutes > 0 or (hours and minutes == 0) else ""
+        seconds = f"{seconds} Sec(s)"
+        self.my_logger.info(f"All work done with in {days}{hours}{minutes}{seconds}.")
 
     def unload_models(
             self
@@ -499,7 +525,12 @@ def setup_args() -> argparse.Namespace:
     llm_args.add_argument(
         '--llm_model_name',
         type=str,
-        help='model name for inference, default is `Llama-3.2-11B-Vision`'
+        help='model name for inference, default is `Llama-3.2-11B-Vision-Instruct`'
+    )
+    llm_args.add_argument(
+        '--llm_patch',
+        action='store_true',
+        help='patch llm with lora for uncensored, only support `Llama-3.2-11B-Vision-Instruct` now'
     )
     llm_args.add_argument(
         '--llm_use_cpu',

@@ -21,6 +21,16 @@
           "model-00004-of-00005.safetensors": "https://huggingface.co/meta-llama/Llama-3.2-11B-Vision-Instruct/resolve/main/model-00004-of-00005.safetensors",
           "model-00005-of-00005.safetensors": "https://huggingface.co/meta-llama/Llama-3.2-11B-Vision-Instruct/resolve/main/model-00005-of-00005.safetensors"
         }
+      },
+      "patch": {
+        "repo_id": "Guilherme34/Llama-3.2-11b-vision-uncensored",
+        "revision": "main",
+        "repo_type": "model",
+        "subfolder": "",
+        "file_list": {
+          "adapter_config.json": "https://huggingface.co/Guilherme34/Llama-3.2-11b-vision-uncensored/resolve/main/adapter_config.json",
+          "adapter_model.safetensors": "https://huggingface.co/Guilherme34/Llama-3.2-11b-vision-uncensored/resolve/main/adapter_model.safetensors"
+        }
       }
     },
     "modelscope": {
@@ -42,6 +52,15 @@
           "model-00003-of-00005.safetensors": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-11B-Vision-Instruct/resolve/master/model-00003-of-00005.safetensors",
           "model-00004-of-00005.safetensors": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-11B-Vision-Instruct/resolve/master/model-00004-of-00005.safetensors",
           "model-00005-of-00005.safetensors": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-11B-Vision-Instruct/resolve/master/model-00005-of-00005.safetensors"
+        }
+      },
+      "patch": {
+        "repo_id": "fireicewolf/Llama-3.2-11b-vision-uncensored",
+        "revision": "master",
+        "subfolder": "",
+        "file_list": {
+          "adapter_config.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-11b-vision-uncensored/resolve/main/adapter_config.json",
+          "adapter_model.safetensors": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-11b-vision-uncensored/resolve/main/adapter_model.safetensors"
         }
       }
     }

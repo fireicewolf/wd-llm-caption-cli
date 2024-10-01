@@ -30,7 +30,7 @@ def url_download(
     total_size = int(response.headers.get('content-length', 0))
 
     def download_progress():
-        desc = 'Downloading {}'.format(filename)
+        desc = f'Downloading {filename}'
 
         if total_size > 0:
             pbar = tqdm(total=total_size, initial=0, unit='B', unit_divisor=1024, unit_scale=True,
@@ -110,6 +110,7 @@ def download_models(
         logger.info(f'Models will be stored in {str(models_save_path)}.')
 
     def download_choice(
+            args: argparse.Namespace,
             model_info: dict[str],
             model_site: str,
             models_save_path: Path,
@@ -139,6 +140,7 @@ def download_models(
                                'retrying with URL method to download...')
 
             models_path = download_choice(
+                args,
                 model_info,
                 model_site,
                 models_save_path,
@@ -152,6 +154,9 @@ def download_models(
         models_path = []
         for sub_model_name in model_site_info:
             sub_model_info = model_site_info[sub_model_name]
+            if sub_model_name == "patch" and not args.llm_patch:
+                logger.warning(f"Found LLM patch, but llm_patch not enabled, won't download it.")
+                continue
             sub_model_path = ""
 
             for filename in sub_model_info["file_list"]:
@@ -197,6 +202,7 @@ def download_models(
         return models_path
 
     models_path = download_choice(
+        args=args,
         model_info=model_info,
         model_site=str(args.model_site),
         models_save_path=Path(models_save_path),
@@ -221,4 +227,8 @@ def download_models(
         return image_adapter_path, clip_path, llm_path
     elif models_type == "llama":
         llm_path = Path(os.path.dirname(models_path[0]))
-        return llm_path
+        if args.llm_patch:
+            llm_patch_path = Path(os.path.dirname(models_path[1]))
+            return llm_path, llm_patch_path
+        else:
+            return llm_path

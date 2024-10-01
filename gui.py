@@ -84,15 +84,26 @@ with gr.Blocks(title="WD LLM Caption") as demo:
                             wd_model_visible = gr.Dropdown(visible=True if "wd" in caption_method_radio else False)
                             joy_model_visible = gr.Dropdown(
                                 visible=True if "joy" in caption_method_radio else False)
-                            llama_model_visible = gr.Dropdown(
+                            llm_use_patch_visible = llama_model_visible = gr.update(
                                 visible=True if "llama" in caption_method_radio else False)
-                            return run_method_visible, wd_model_visible, joy_model_visible, llama_model_visible
+                            return run_method_visible, wd_model_visible, joy_model_visible, llama_model_visible, \
+                                llm_use_patch_visible
 
                 with gr.Column(min_width=240):
                     with gr.Column(min_width=240):
                         wd_force_use_cpu = gr.Checkbox(label="Force use CPU for WD inference")
-
                         llm_use_cpu = gr.Checkbox(label="Use cpu for LLM inference")
+
+                    llm_use_patch = gr.Checkbox(label="Use LLM LoRA to avoid censored")
+
+
+                    def llm_use_patch_visibility(llama_model_dropdown):
+                        return gr.update(
+                            visible=True if llama_model_dropdown == "Llama-3.2-11B-Vision-Instruct" else False)
+
+
+                    llama_model.select(fn=llm_use_patch_visibility, inputs=llama_model, outputs=llm_use_patch)
+
                     with gr.Column(min_width=240):
                         llm_dtype = gr.Radio(label="LLM dtype", choices=["fp16", "bf16", "fp32"], value="fp16",
                                              interactive=True)
@@ -204,7 +215,7 @@ with gr.Blocks(title="WD LLM Caption") as demo:
                         run_method = gr.Radio(label="Run method", choices=['sync', 'queue'],
                                               value="sync", interactive=True)
                         caption_method.change(fn=llm_update_visibility, inputs=caption_method,
-                                              outputs=[run_method, wd_model, joy_model, llama_model])
+                                              outputs=[run_method, wd_model, joy_model, llama_model, llm_use_patch])
                         with gr.Column(min_width=240):
                             skip_exists = gr.Checkbox(label="Will not caption file if caption exists")
                             not_overwrite = gr.Checkbox(label="Will not overwrite caption file if exists")
@@ -237,6 +248,7 @@ with gr.Blocks(title="WD LLM Caption") as demo:
             gr.update(interactive=False),
             gr.update(interactive=False),
             gr.update(interactive=False),
+            gr.update(interactive=False),
             gr.update(variant='secondary'),
             gr.update(variant='primary')
         ]
@@ -244,6 +256,7 @@ with gr.Blocks(title="WD LLM Caption") as demo:
 
     def unloads_models_interactive_group():
         return [
+            gr.update(interactive=True),
             gr.update(interactive=True),
             gr.update(interactive=True),
             gr.update(interactive=True),
@@ -322,6 +335,7 @@ with gr.Blocks(title="WD LLM Caption") as demo:
             llama_model_value,
             wd_force_use_cpu_value,
             llm_use_cpu_value,
+            llm_use_patch_value,
             llm_dtype_value,
             llm_qnt_value
     ):
@@ -360,6 +374,7 @@ with gr.Blocks(title="WD LLM Caption") as demo:
             args.wd_force_use_cpu = bool(wd_force_use_cpu_value)
 
             args.llm_use_cpu = bool(llm_use_cpu_value)
+            args.llm_patch = bool(llm_use_patch_value)
             args.llm_dtype = str(llm_dtype_value)
             args.llm_qnt = str(llm_qnt_value)
             # SKIP DOWNLOAD
@@ -564,19 +579,20 @@ with gr.Blocks(title="WD LLM Caption") as demo:
                                     caption_method,
                                     wd_model, joy_model, llama_model,
                                     wd_force_use_cpu,
-                                    llm_use_cpu, llm_dtype, llm_qnt],
+                                    llm_use_cpu, llm_use_patch, llm_dtype, llm_qnt],
                             outputs=[model_site, huggingface_token,
                                      caption_method,
                                      wd_model, joy_model, llama_model,
                                      wd_force_use_cpu,
-                                     llm_use_cpu, llm_dtype, llm_qnt,
+                                     llm_use_cpu, llm_use_patch, llm_dtype, llm_qnt,
                                      load_model_button, unload_model_button])
+
     unload_model_button.click(fn=caption_unload_models,
                               outputs=[model_site, huggingface_token,
                                        caption_method,
                                        wd_model, joy_model, llama_model,
                                        wd_force_use_cpu,
-                                       llm_use_cpu, llm_dtype, llm_qnt,
+                                       llm_use_cpu, llm_use_patch, llm_dtype, llm_qnt,
                                        load_model_button, unload_model_button])
 
     single_image_submit_button.click(fn=caption_single_inference,
