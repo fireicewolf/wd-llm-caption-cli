@@ -1,5 +1,6 @@
 accelerate==0.34.2
 bitsandbytes==0.44.0
-transformers==4.45.0
+peft==0.13.0
 sentencepiece==0.2.0
+transformers==4.45.0
 -r requirements.txt
