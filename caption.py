@@ -188,13 +188,13 @@ class Caption:
             # Set joy user prompt
             if args.llm_user_prompt == DEFAULT_USER_PROMPT_WITHOUT_WD:
                 if not args.llm_caption_without_wd:
-                    self.my_logger.info(f"LLM user prompt not defined, using default version with wd tags...")
+                    self.my_logger.warning(f"LLM user prompt not defined, using default version with wd tags...")
                     args.llm_user_prompt = DEFAULT_USER_PROMPT_WITH_WD
             # run
             if args.run_method == "sync":
                 image_paths = get_image_paths(logger=self.my_logger, path=Path(args.data_path),
                                               recursive=args.recursive)
-                pbar = tqdm(total=len(image_paths), smoothing=0.0)
+                pbar = tqdm(total=len(image_paths), initial=1, smoothing=0.0)
                 for image_path in image_paths:
                     try:
                         pbar.set_description('Processing: {}'.format(image_path if len(image_path) <= 40 else
