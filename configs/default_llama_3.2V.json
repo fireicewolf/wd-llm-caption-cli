@@ -39,7 +39,7 @@
         "revision": "master",
         "subfolder": "",
         "file_list": {
-          "chat_template.json": "https://huggingface.co/fireicewolf/Llama-3.2-11B-Vision-Instruct/resolve/main/chat_template.json",
+          "chat_template.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-11B-Vision-Instruct/resolve/master/chat_template.json",
           "config.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-11B-Vision-Instruct/resolve/master/config.json",
           "generation_config.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-11B-Vision-Instruct/resolve/master/generation_config.json",
           "preprocessor_config.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-11B-Vision-Instruct/resolve/master/preprocessor_config.json",
@@ -59,8 +59,8 @@
         "revision": "master",
         "subfolder": "",
         "file_list": {
-          "adapter_config.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-11b-vision-uncensored/resolve/main/adapter_config.json",
-          "adapter_model.safetensors": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-11b-vision-uncensored/resolve/main/adapter_model.safetensors"
+          "adapter_config.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-11b-vision-uncensored/resolve/master/adapter_config.json",
+          "adapter_model.safetensors": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-11b-vision-uncensored/resolve/master/adapter_model.safetensors"
         }
       }
     }
@@ -127,7 +127,7 @@
         "revision": "master",
         "subfolder": "",
         "file_list": {
-          "chat_template.json": "https://huggingface.co/fireicewolf/Llama-3.2-90B-Vision-Instruct/resolve/main/chat_template.json",
+          "chat_template.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-90B-Vision-Instruct/resolve/master/chat_template.json",
           "config.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-90B-Vision-Instruct/resolve/master/config.json",
           "generation_config.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-90B-Vision-Instruct/resolve/master/generation_config.json",
           "preprocessor_config.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.2-90B-Vision-Instruct/resolve/master/preprocessor_config.json",
