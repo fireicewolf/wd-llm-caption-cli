@@ -75,7 +75,7 @@ def download_models(
         args: argparse.Namespace,
         config_file: Path,
         models_save_path: Path,
-) -> tuple[Path, Path] | tuple[Path, Path, Path] | Path:
+) -> tuple[Path]:
     if os.path.isfile(config_file):
         logger.info(f'Using config: {str(config_file)}')
     else:
@@ -88,7 +88,7 @@ def download_models(
             if models_type == "wd":
                 model_name = list(datas.keys())[0] if args.wd_model_name is None else args.wd_model_name
                 args.wd_model_name = model_name
-            elif models_type in ["joy", "llama"]:
+            elif models_type in ["joy", "llama", "qwen"]:
                 model_name = list(datas.keys())[0] if args.llm_model_name is None else args.llm_model_name
                 args.llm_model_name = model_name
             else:
@@ -231,4 +231,6 @@ def download_models(
             llm_patch_path = Path(os.path.dirname(models_path[1]))
             return llm_path, llm_patch_path
         else:
-            return llm_path
+            return llm_path,
+    elif models_type == "qwen":
+        return Path(os.path.dirname(models_path[0])),
