@@ -14,8 +14,6 @@ This tool can make a caption with danbooru style tags or a nature language descr
 #### 2024.10.04: Add Qwen2 VL support.
 #### 2024.09.30: A simple gui run through gradio now(Please use [gui branch](https://github.com/fireicewolf/wd-llm-caption-cli/tree/gui))😊
 
-<img alt="DEMO_her.jpg" src="DEMO/DEMO_GUI.png" width="300"/>
-
 ## Example
 
 <img alt="DEMO_her.jpg" src="DEMO/DEMO_her.jpg" width="300" height="400"/>
