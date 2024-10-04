@@ -48,6 +48,7 @@ Please describe this image."""
 
 DEFAULT_USER_PROMPT_WITHOUT_WD = """Please describe this image."""
 
+
 def get_caption_file_path(
         logger: Logger,
         data_path: Path,
@@ -79,52 +80,110 @@ def get_caption_file_path(
     return caption_file
 
 
-class Llama:
+class LLM:
     def __init__(
             self,
             logger: Logger,
+            models_type: str,
+            models_paths: tuple[Path],
             args: Namespace,
-            llm_path: Path,
-            llama_patch_path: Path = None
     ):
         self.logger = logger
+        if models_type in ["llama", "joy", "qwen"]:
+            self.models_type = models_type
+        else:
+            self.logger.error(f"Invalid model type: {models_type}!!!")
+            raise ValueError
         self.args = args
-        self.llm_path = llm_path
-        self.llama_patch_path = llama_patch_path
+
+        if self.models_type == "joy":
+            if len(models_paths) != 3:
+                self.logger.error(self.logger.error(f"Invalid models paths: {models_paths}!!!"))
+                raise ValueError
+
+            self.image_adapter_path = models_paths[0]
+            self.clip_path = models_paths[1]
+            self.llm_path = models_paths[2]
+
+            self.image_adapter = None
+            self.clip_processor = None
+            self.clip_model = None
+            self.llm_tokenizer = None
+
+        elif self.models_type == "llama":
+            if len(models_paths) != 1 or (self.args.llm_patch and len(models_paths) != 2):
+                self.logger.error(self.logger.error(f"Invalid models paths: {models_paths}!!!"))
+                raise ValueError
+
+            self.llm_path = models_paths[0]
+
+            if self.args.llm_patch:
+                self.llm_patch_path = models_paths[1]
+                self.llm_patch = None
+
+            self.llm_processor = None
+
+        elif self.models_type == "qwen":
+            if len(models_paths) != 1:
+                self.logger.error(self.logger.error(f"Invalid models paths: {models_paths}!!!"))
+                raise ValueError
+
+            self.llm_path = models_paths[0]
+
+            self.llm_processor = None
 
         self.llm = None
-        self.llm_patch = None
-        self.llm_processor = None
-        # self.llm_tokenizer = None
 
     def load_model(self):
-        if not os.path.exists(self.llm_path):
-            self.logger.error(f'{str(self.llm_path)} NOT FOUND!')
-            raise FileNotFoundError
         # Import torch
         try:
             import torch
-            import torch.amp.autocast_mode
-            from torch import nn
+            if self.models_type == "joy":
+                from torch import nn
         except ImportError as ie:
             self.logger.error(f'Import torch Failed!\nDetails: {ie}')
             raise ImportError
-
         # Import transformers
         try:
-            from transformers import (AutoProcessor, AutoTokenizer, BitsAndBytesConfig, MllamaForConditionalGeneration)
-            from peft import PeftConfig, PeftModel
+            from transformers import (AutoProcessor, AutoTokenizer, BitsAndBytesConfig)
+            if self.models_type == "joy":
+                from transformers import (AutoModel, AutoModelForCausalLM, PreTrainedTokenizer, PreTrainedTokenizerFast)
+            elif self.models_type == "llama":
+                from transformers import MllamaForConditionalGeneration
+                from peft import PeftConfig, PeftModel
+            elif self.models_type == "qwen":
+                from transformers import Qwen2VLForConditionalGeneration
         except ImportError as ie:
             self.logger.error(f'Import transformers Failed!\nDetails: {ie}')
             raise ImportError
 
+        device = "cpu" if self.args.llm_use_cpu else "cuda"
+        # Load CLIP model for Joy
+        if self.models_type == "joy":
+            self.logger.info(f'Loading CLIP with {"CPU" if self.args.llm_use_cpu else "GPU"}...')
+            start_time = time.monotonic()
+            self.clip_processor = AutoProcessor.from_pretrained(self.clip_path)
+            self.clip_model = AutoModel.from_pretrained(self.clip_path)
+            self.clip_model = self.clip_model.vision_model
+            self.clip_model.eval()
+            self.clip_model.requires_grad_(False)
+            self.clip_model.to(device)
+            self.logger.info(f'CLIP Loaded in {time.monotonic() - start_time:.1f}s.')
         # Load LLM
         self.logger.info(
             f'Loading LLM `{self.args.llm_model_name}` with {"CPU" if self.args.llm_use_cpu else "GPU"}...')
         start_time = time.monotonic()
+        # Load tokenizer
+        if self.models_type == "joy":
+            self.llm_tokenizer = AutoTokenizer.from_pretrained(self.llm_path, use_fast=False, trust_remote_code=True)
+            assert (isinstance(self.llm_tokenizer, PreTrainedTokenizer) or
+                    isinstance(self.llm_tokenizer, PreTrainedTokenizerFast)), \
+                f"Tokenizer is of type {type(self.llm_tokenizer)}"
+        # LLM dType
         llm_dtype = torch.float32 if self.args.llm_use_cpu or self.args.llm_dtype == "fp32" else torch.float16 \
-            if self.args.llm_dtype == "fp16" else torch.bfloat16
+            if self.args.llm_dtype == "fp16" else torch.bfloat16 if self.args.llm_dtype == "bf16" else "auto"
         self.logger.info(f'LLM dtype: {llm_dtype}')
+        # LLM BNB quantization config
         if self.args.llm_qnt == "4bit":
             qnt_config = BitsAndBytesConfig(load_in_4bit=True,
                                             bnb_4bit_quant_type="nf4",
@@ -137,38 +196,83 @@ class Llama:
             self.logger.info(f'LLM 8bit quantization: Enabled')
         else:
             qnt_config = None
-        chat_template_json = os.path.join(self.llm_path,"chat_template.json")
-        if os.path.isfile(chat_template_json):
-            with open(chat_template_json, 'r') as file:
-                file_contents = file.read()
-            if "set image_ns.has_images = true" in file_contents:
-                self.logger.warning(f"Found `{chat_template_json}` need to patch, patching...")
-                file_contents = file_contents.replace('set image_ns.has_images = true', 'set image_ns.has_images = false')
-                with open(chat_template_json, 'w') as file:
-                    file.write(file_contents)
-                del file_contents
-                self.logger.warning(f"`{chat_template_json}` patched.")
 
+        if self.models_type == "joy":
+            # Load `Llama 3.1` model
+            self.llm = AutoModelForCausalLM.from_pretrained(self.llm_path,
+                                                            device_map="auto" \
+                                                                if not self.args.llm_use_cpu else "cpu",
+                                                            torch_dtype=llm_dtype \
+                                                                if self.args.llm_qnt == "none" else None,
+                                                            quantization_config=qnt_config)
+        elif self.models_type == "llama":
+            # Patch `Llama 3.2 Vision Instruct` `chat_template.json`
+            chat_template_json = os.path.join(self.llm_path, "chat_template.json")
+            if os.path.isfile(chat_template_json):
+                with open(chat_template_json, 'r') as file:
+                    file_contents = file.read()
+                if "set image_ns.has_images = true" in file_contents:
+                    self.logger.warning(f"Found `{chat_template_json}` need to patch, patching...")
+                    file_contents = file_contents.replace('set image_ns.has_images = true',
+                                                          'set image_ns.has_images = false')
+                    with open(chat_template_json, 'w') as file:
+                        file.write(file_contents)
+                    del file_contents
+                    self.logger.warning(f"`{chat_template_json}` patched.")
+            # Load `Llama 3.2 Vision Instruct`
+            self.llm = MllamaForConditionalGeneration.from_pretrained(self.llm_path,
+                                                                      device_map="auto" \
+                                                                          if not self.args.llm_use_cpu else "cpu",
+                                                                      torch_dtype=llm_dtype \
+                                                                          if self.args.llm_qnt == "none" else None,
+                                                                      quantization_config=qnt_config)
+            # Load `Llama 3.2 Vision Instruct` LoRA patch
+            if self.args.llm_patch and self.llm_patch_path:
+                self.logger.info(f'Applying LLM Patch...')
+                patch_config = PeftConfig.from_pretrained(str(self.llm_patch_path))
+                self.llm = PeftModel.from_pretrained(self.llm, self.llm_patch_path)
+                self.logger.info(f'LLM Patched.')
 
-        self.llm = MllamaForConditionalGeneration.from_pretrained(self.llm_path,
-                                                                  device_map="auto" if not self.args.llm_use_cpu else "cpu",
-                                                                  torch_dtype=llm_dtype if self.args.llm_qnt == "none" else None,
-                                                                  quantization_config=qnt_config)
-        if self.args.llm_patch and self.llama_patch_path:
-            self.logger.info(f'Applying LLM Patch...')
-            patch_config = PeftConfig.from_pretrained(str(self.llama_patch_path))
-            self.llm = PeftModel.from_pretrained(self.llm, self.llama_patch_path)
-            self.logger.info(f'LLM Patched.')
+        elif self.models_type == "qwen":
+            # Load Qwen 2 VL model
+            self.llm = Qwen2VLForConditionalGeneration.from_pretrained(self.llm_path,
+                                                                       device_map="auto" \
+                                                                           if not self.args.llm_use_cpu else "cpu",
+                                                                       torch_dtype=llm_dtype \
+                                                                           if self.args.llm_qnt == "none" else None,
+                                                                       quantization_config=qnt_config)
 
         self.llm.eval()
-        # self.llm_tokenizer = AutoTokenizer.from_pretrained(self.llm_path)
         self.logger.info(f'LLM Loaded in {time.monotonic() - start_time:.1f}s.')
+        # Load processor for `Llama 3.2 Vision Instruct` & `Qwen 2 VL`
+        if self.models_type in ["llama", "qwen"]:
+            start_time = time.monotonic()
+            self.logger.info(f'Loading processor with {"CPU" if self.args.llm_use_cpu else "GPU"}...')
+            self.llm_processor = AutoProcessor.from_pretrained(self.llm_path)
+            self.logger.info(f'Processor Loaded in {time.monotonic() - start_time:.1f}s.')
 
-        # Load processor
-        start_time = time.monotonic()
-        self.logger.info(f'Loading processor with {"CPU" if self.args.llm_use_cpu else "GPU"}...')
-        self.llm_processor = AutoProcessor.from_pretrained(self.llm_path)
-        self.logger.info(f'Processor Loaded in {time.monotonic() - start_time:.1f}s.')
+        # Load Image Adapter for Joy
+        if self.models_type == "joy":
+            class ImageAdapter(nn.Module):
+                def __init__(self, input_features: int, output_features: int):
+                    super().__init__()
+                    self.linear1 = nn.Linear(input_features, output_features)
+                    self.activation = nn.GELU()
+                    self.linear2 = nn.Linear(output_features, output_features)
+
+                def forward(self, vision_outputs: torch.Tensor):
+                    x = self.linear1(vision_outputs)
+                    x = self.activation(x)
+                    x = self.linear2(x)
+                    return x
+
+            self.logger.info(f'Loading Image Adapter with {"CPU" if self.args.llm_use_cpu else "GPU"}...')
+            start_time = time.monotonic()
+            self.image_adapter = ImageAdapter(self.clip_model.config.hidden_size, self.llm.config.hidden_size)
+            self.image_adapter.load_state_dict(torch.load(self.image_adapter_path, map_location="cpu"))
+            self.image_adapter.eval()
+            self.image_adapter.to(device)
+            self.logger.info(f'Image Adapter Loaded in {time.monotonic() - start_time:.1f}s.')
 
     def get_caption(
             self,
@@ -176,60 +280,106 @@ class Llama:
             system_prompt: str,
             user_prompt: str,
             temperature: float = 0.5,
-            max_new_tokens: int = 512,
+            max_new_tokens: int = 300,
     ) -> str:
         # Import torch
         try:
             import torch
-            import torch.amp.autocast_mode
+            if self.models_type == "joy":
+                import torch.amp.autocast_mode
         except ImportError as ie:
             self.logger.error(f'Import torch Failed!\nDetails: {ie}')
             raise ImportError
-
+        device = "cpu" if self.args.llm_use_cpu else "cuda"
         # Cleaning VRAM cache
         if not self.args.llm_use_cpu:
             self.logger.info(f'Will empty cuda device cache...')
             torch.cuda.empty_cache()
-        if system_prompt:
-            if self.args.llm_patch and self.llama_patch_path:
-                system_prompt = f"LLAMA GUARD TURNED OFF>>>{system_prompt}"
-            messages = [
-                {"role": "system", "content": f"{system_prompt}"},
-                {"role": "user", "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": f"{user_prompt}"}]
-                 }
-            ]
+
+        if self.models_type == "joy":
+            # Preprocess image
+            image = self.clip_processor(images=image, return_tensors='pt').pixel_values
+            image = image.to(device)
+            # Tokenize the prompt
+            self.logger.debug(f'Using user prompt:{user_prompt}')
+            prompt = self.llm_tokenizer.encode(user_prompt,
+                                               return_tensors='pt',
+                                               padding=False,
+                                               truncation=False,
+                                               add_special_tokens=False)
+            # Embed image
+            with torch.amp.autocast_mode.autocast(device, enabled=True):
+                vision_outputs = self.clip_model(pixel_values=image, output_hidden_states=True)
+                image_features = vision_outputs.hidden_states[-2]
+                embedded_images = self.image_adapter(image_features)
+                embedded_images = embedded_images.to(device)
+            # Embed prompt
+            prompt_embeds = self.llm.model.embed_tokens(prompt.to(device))
+            assert prompt_embeds.shape == (1, prompt.shape[1],
+                                           self.llm.config.hidden_size), \
+                f"Prompt shape is {prompt_embeds.shape}, expected {(1, prompt.shape[1], self.llm.config.hidden_size)}"
+            embedded_bos = self.llm.model.embed_tokens(torch.tensor([[self.llm_tokenizer.bos_token_id]],
+                                                                    device=self.llm.device,
+                                                                    dtype=torch.int64))
+            # Construct prompts
+            inputs_embeds = torch.cat([
+                embedded_bos.expand(embedded_images.shape[0], -1, -1),
+                embedded_images.to(dtype=embedded_bos.dtype),
+                prompt_embeds.expand(embedded_images.shape[0], -1, -1),
+            ], dim=1)
+
+            input_ids = torch.cat([
+                torch.tensor([[self.llm_tokenizer.bos_token_id]], dtype=torch.long),
+                torch.zeros((1, embedded_images.shape[1]), dtype=torch.long),
+                prompt,
+            ], dim=1).to(device)
+            attention_mask = torch.ones_like(input_ids)
+            # Generate caption
+            self.logger.debug(f'LLM temperature is {temperature}')
+            self.logger.debug(f'LLM max_new_tokens is {max_new_tokens}')
+            generate_ids = self.llm.generate(input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask,
+                                             max_new_tokens=max_new_tokens,
+                                             do_sample=True, top_k=10,
+                                             temperature=temperature, suppress_tokens=None)
+            # Trim off the prompt
+            generate_ids = generate_ids[:, input_ids.shape[1]:]
+            if generate_ids[0][-1] == self.llm_tokenizer.eos_token_id:
+                generate_ids = generate_ids[:, :-1]
+
+            content = self.llm_tokenizer.batch_decode(generate_ids, skip_special_tokens=False,
+                                                      clean_up_tokenization_spaces=False)[0]
+            content = content.strip()
         else:
-            messages = [
-                {"role": "user", "content": [
-                    {"type": "image"},
-                    {"type": "text", "text": f"{user_prompt}"}]
-                 }
-            ]
-
-        self.logger.debug(f"\nChat_template:\n{messages}")
-
-        input_text = self.llm_processor.apply_chat_template(messages, add_generation_prompt=True)
-        inputs = self.llm_processor(image, input_text,
-                                    add_special_tokens=False, return_tensors="pt").to(self.llm.device)
-
-        # Generate caption
-        self.logger.debug(f'LLM temperature is {temperature}')
-        self.logger.debug(f'LLM max_new_tokens is {max_new_tokens}')
-        # terminators = [
-        #     self.llm_tokenizer.eos_token_id,
-        #     self.llm_tokenizer.convert_tokens_to_ids("<|eot_id|>")
-        # ]
-        output = self.llm.generate(**inputs,
-                                   max_new_tokens=max_new_tokens,
-                                   # eos_token_id=terminators,
-                                   # do_sample=True, top_k=10,
-                                   temperature=temperature,
-                                   # suppress_tokens=None
-                                   )
-        content = self.llm_processor.decode(output[0][inputs["input_ids"].shape[-1]:])
-        content = content.rstrip("<|eot_id|>")
+            if system_prompt:
+                if self.models_type == "llama" and self.args.llm_patch and self.llm_patch_path:
+                    system_prompt = f"LLAMA GUARD TURNED OFF>>>{system_prompt}"
+                messages = [
+                    {"role": "system", "content": f"{system_prompt}"},
+                    {"role": "user", "content": [
+                        {"type": "image"},
+                        {"type": "text", "text": f"{user_prompt}"}]
+                     }
+                ]
+            else:
+                messages = [
+                    {"role": "user", "content": [
+                        {"type": "image"},
+                        {"type": "text", "text": f"{user_prompt}"}]
+                     }
+                ]
+            self.logger.debug(f"\nChat_template:\n{messages}")
+            input_text = self.llm_processor.apply_chat_template(messages, add_generation_prompt=True)
+            inputs = self.llm_processor(image, input_text,
+                                        add_special_tokens=False, return_tensors="pt").to(self.llm.device)
+            # Generate caption
+            self.logger.debug(f'LLM temperature is {temperature}')
+            self.logger.debug(f'LLM max_new_tokens is {max_new_tokens}')
+            output = self.llm.generate(**inputs,
+                                       max_new_tokens=max_new_tokens,
+                                       do_sample=True, top_k=10,
+                                       temperature=temperature)
+            content = self.llm_processor.decode(output[0][inputs["input_ids"].shape[-1]:],
+                                                skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
         self.logger.debug(f'LLM Output:\n{content}')
         content_list = str(content).split(".")
@@ -239,36 +389,32 @@ class Llama:
 
     def inference(self):
         image_paths = get_image_paths(logger=self.logger, path=Path(self.args.data_path), recursive=self.args.recursive)
-        system_prompt = str(self.args.llm_system_prompt)
-        pbar = tqdm(total=len(image_paths), initial=1, smoothing=0.0)
+        pbar = tqdm(total=len(image_paths), smoothing=0.0)
         for image_path in image_paths:
             try:
                 pbar.set_description('Processing: {}'.format(image_path if len(image_path) <= 40 else
                                                              image_path[:15]) + ' ... ' + image_path[-20:])
-
-                llama_caption_file = get_caption_file_path(
+                llm_caption_file = get_caption_file_path(
                     self.logger,
                     data_path=self.args.data_path,
                     image_path=Path(image_path),
                     custom_caption_save_path=self.args.custom_caption_save_path,
                     caption_extension=self.args.llm_caption_extension
                 )
-
-                if self.args.skip_exists and os.path.isfile(llama_caption_file):
+                # Skip exists
+                if self.args.skip_exists and os.path.isfile(llm_caption_file):
                     self.logger.warning(f'`skip_exists` ENABLED!!! '
-                                        f'LLM Caption file {llama_caption_file} already exists, Skip this caption.')
+                                        f'LLM Caption file {llm_caption_file} already exists, Skip this caption.')
                     continue
-
+                # Image process
                 image = Image.open(image_path)
                 image = image_process(image, int(self.args.image_size))
                 self.logger.debug(f"Resized image shape: {image.shape}")
                 image = image_process_image(image)
-
                 # Change user prompt
-                if (self.args.caption_method == "wd+llama"
-                    and not self.args.llm_caption_without_wd
-                    and self.args.run_method == "queue") or (self.args.caption_method == "llama"
-                                                             and self.args.llm_read_wd_caption):
+                if ((self.args.caption_method in ["wd+joy", "wd+llama", "wd+qwen"]
+                     and not self.args.llm_caption_without_wd and self.args.run_method == "queue")
+                        or (self.args.caption_method in ["joy", "llama", "qwen"] and self.args.llm_read_wd_caption)):
                     wd_caption_file = get_caption_file_path(
                         self.logger,
                         data_path=self.args.data_path,
@@ -287,7 +433,7 @@ class Llama:
                         user_prompt = DEFAULT_USER_PROMPT_WITHOUT_WD
                 else:
                     user_prompt = str(self.args.llm_user_prompt)
-
+                system_prompt = str(self.args.llm_system_prompt) if self.models_type != "joy" else ""
                 caption = self.get_caption(
                     image=image,
                     system_prompt=system_prompt,
@@ -296,297 +442,15 @@ class Llama:
                     max_new_tokens=self.args.llm_max_tokens
                 )
 
-                if not (self.args.not_overwrite and os.path.isfile(llama_caption_file)):
-                    with open(llama_caption_file, "wt", encoding="utf-8") as f:
-                        f.write(caption + "\n")
-                    self.logger.debug(f"LLM Image path: {image_path}")
-                    self.logger.debug(f"LLM Caption path: {llama_caption_file}")
-                    self.logger.debug(f"LLM Caption content: {caption}")
-                else:
-                    self.logger.warning(f'`not_overwrite` ENABLED!!! '
-                                        f'LLM Caption file {llama_caption_file} already exist! Skip this caption.')
-
-            except Exception as e:
-                self.logger.error(f"Failed to caption image: {image_path}, skip it.\nerror info: {e}")
-                continue
-
-            pbar.update(1)
-
-        pbar.close()
-
-    def unload_model(self) -> bool:
-        image_adapter_unloaded = llm_unloaded = clip_model_unloaded = False
-        # Unload LLM
-        if self.llm:
-            self.logger.info(f'Unloading LLM...')
-            start = time.monotonic()
-            del self.llm
-            del self.llm_processor
-            # del self.llm_tokenizer
-            self.logger.info(f'LLM unloaded in {time.monotonic() - start:.1f}s.')
-            llm_unloaded = True
-
-        return image_adapter_unloaded and llm_unloaded and clip_model_unloaded
-
-
-class Joy:
-    def __init__(
-            self,
-            logger: Logger,
-            args: Namespace,
-            image_adapter_path: Path,
-            clip_path: Path,
-            llm_path: Path,
-    ):
-        self.logger = logger
-        self.args = args
-        self.image_adapter_path = image_adapter_path
-        self.clip_path = clip_path
-        self.llm_path = llm_path
-        self.image_adapter = None
-        self.clip_processor = None
-        self.clip_model = None
-        self.llm_tokenizer = None
-        self.llm = None
-
-    def load_model(self):
-        if not os.path.exists(self.image_adapter_path):
-            self.logger.error(f'{str(self.image_adapter_path)} NOT FOUND!')
-            raise FileNotFoundError
-        if not os.path.exists(self.clip_path):
-            self.logger.error(f'{str(self.clip_path)} NOT FOUND!')
-            raise FileNotFoundError
-        if not os.path.exists(self.llm_path):
-            self.logger.error(f'{str(self.llm_path)} NOT FOUND!')
-            raise FileNotFoundError
-        # Import torch
-        try:
-            import torch
-            import torch.amp.autocast_mode
-            from torch import nn
-        except ImportError as ie:
-            self.logger.error(f'Import torch Failed!\nDetails: {ie}')
-            raise ImportError
-        # Import transformers
-        try:
-            from transformers import (AutoModel, AutoProcessor, AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig,
-                                      PreTrainedTokenizer, PreTrainedTokenizerFast)
-        except ImportError as ie:
-            self.logger.error(f'Import transformers Failed!\nDetails: {ie}')
-            raise ImportError
-
-        class ImageAdapter(nn.Module):
-            def __init__(self, input_features: int, output_features: int):
-                super().__init__()
-                self.linear1 = nn.Linear(input_features, output_features)
-                self.activation = nn.GELU()
-                self.linear2 = nn.Linear(output_features, output_features)
-
-            def forward(self, vision_outputs: torch.Tensor):
-                x = self.linear1(vision_outputs)
-                x = self.activation(x)
-                x = self.linear2(x)
-                return x
-
-        device = "cpu" if self.args.llm_use_cpu else "cuda"
-        # Load CLIP
-        self.logger.info(f'Loading CLIP with {"CPU" if self.args.llm_use_cpu else "GPU"}...')
-        start_time = time.monotonic()
-        self.clip_processor = AutoProcessor.from_pretrained(self.clip_path)
-        self.clip_model = AutoModel.from_pretrained(self.clip_path)
-        self.clip_model = self.clip_model.vision_model
-        self.clip_model.eval()
-        self.clip_model.requires_grad_(False)
-        self.clip_model.to(device)
-        self.logger.info(f'CLIP Loaded in {time.monotonic() - start_time:.1f}s.')
-
-        # Load LLM
-        self.logger.info(f'Loading LLM with {"CPU" if self.args.llm_use_cpu else "GPU"}...')
-        start_time = time.monotonic()
-        self.llm_tokenizer = AutoTokenizer.from_pretrained(self.llm_path, use_fast=False, trust_remote_code=True)
-        assert (isinstance(self.llm_tokenizer, PreTrainedTokenizer) or
-                isinstance(self.llm_tokenizer, PreTrainedTokenizerFast)), \
-            f"Tokenizer is of type {type(self.llm_tokenizer)}"
-        llm_dtype = torch.float32 if self.args.llm_use_cpu or self.args.llm_dtype == "fp32" else torch.float16 \
-            if self.args.llm_dtype == "fp16" else torch.bfloat16
-        self.logger.info(f'Joy LLM dtype: {llm_dtype}')
-        if self.args.llm_qnt == "4bit":
-            qnt_config = BitsAndBytesConfig(load_in_4bit=True,
-                                            bnb_4bit_quant_type="nf4",
-                                            llm_int8_enable_fp32_cpu_offload=True,
-                                            bnb_4bit_compute_dtype=llm_dtype)
-            self.logger.info(f'LLM 4bit quantization: Enabled')
-        elif self.args.llm_qnt == "8bit":
-            qnt_config = BitsAndBytesConfig(load_in_8bit=True,
-                                            bnb_8bit_quant_type="int8",
-                                            llm_int8_enable_fp32_cpu_offload=True,
-                                            bnb_8bit_compute_dtype=llm_dtype)
-            self.logger.info(f'LLM 8bit quantization: Enabled')
-        else:
-            qnt_config = None
-        self.llm = AutoModelForCausalLM.from_pretrained(self.llm_path,
-                                                        device_map="auto" if not self.args.llm_use_cpu else "cpu",
-                                                        torch_dtype=llm_dtype if self.args.llm_qnt == "none" else None,
-                                                        quantization_config=qnt_config)
-        self.llm.eval()
-        self.logger.info(f'LLM Loaded in {time.monotonic() - start_time:.1f}s.')
-
-        # Load Image Adapter
-        self.logger.info(f'Loading Image Adapter with {"CPU" if self.args.llm_use_cpu else "GPU"}...')
-        start_time = time.monotonic()
-        self.image_adapter = ImageAdapter(self.clip_model.config.hidden_size, self.llm.config.hidden_size)
-        self.image_adapter.load_state_dict(torch.load(self.image_adapter_path, map_location="cpu"))
-        self.image_adapter.eval()
-        self.image_adapter.to(device)
-        self.logger.info(f'Image Adapter Loaded in {time.monotonic() - start_time:.1f}s.')
-
-    def get_caption(
-            self,
-            image: Image.Image,
-            user_prompt: str,
-            temperature: float = 0.5,
-            max_new_tokens: int = 300,
-    ) -> str:
-        # Import torch
-        try:
-            import torch
-            import torch.amp.autocast_mode
-        except ImportError as ie:
-            self.logger.error(f'Import torch Failed!\nDetails: {ie}')
-            raise ImportError
-        device = "cpu" if self.args.llm_use_cpu else "cuda"
-        # Cleaning VRAM cache
-        if not self.args.llm_use_cpu:
-            self.logger.info(f'Will empty cuda device cache...')
-            torch.cuda.empty_cache()
-        # Preprocess image
-        image = self.clip_processor(images=image, return_tensors='pt').pixel_values
-        image = image.to(device)
-        # Tokenize the prompt
-        self.logger.debug(f'Using user prompt:{user_prompt}')
-        prompt = self.llm_tokenizer.encode(user_prompt,
-                                           return_tensors='pt',
-                                           padding=False,
-                                           truncation=False,
-                                           add_special_tokens=False)
-        # Embed image
-        with torch.amp.autocast_mode.autocast(device, enabled=True):
-            vision_outputs = self.clip_model(pixel_values=image, output_hidden_states=True)
-            image_features = vision_outputs.hidden_states[-2]
-            embedded_images = self.image_adapter(image_features)
-            embedded_images = embedded_images.to(device)
-        # Embed prompt
-        prompt_embeds = self.llm.model.embed_tokens(prompt.to(device))
-        assert prompt_embeds.shape == (1, prompt.shape[1],
-                                       self.llm.config.hidden_size), \
-            f"Prompt shape is {prompt_embeds.shape}, expected {(1, prompt.shape[1], self.llm.config.hidden_size)}"
-        embedded_bos = self.llm.model.embed_tokens(torch.tensor([[self.llm_tokenizer.bos_token_id]],
-                                                                device=self.llm.device,
-                                                                dtype=torch.int64))
-        # Construct prompts
-        inputs_embeds = torch.cat([
-            embedded_bos.expand(embedded_images.shape[0], -1, -1),
-            embedded_images.to(dtype=embedded_bos.dtype),
-            prompt_embeds.expand(embedded_images.shape[0], -1, -1),
-        ], dim=1)
-
-        input_ids = torch.cat([
-            torch.tensor([[self.llm_tokenizer.bos_token_id]], dtype=torch.long),
-            torch.zeros((1, embedded_images.shape[1]), dtype=torch.long),
-            prompt,
-        ], dim=1).to(device)
-        attention_mask = torch.ones_like(input_ids)
-        # Generate caption
-        self.logger.debug(f'LLM temperature is {temperature}')
-        self.logger.debug(f'LLM max_new_tokens is {max_new_tokens}')
-        # terminators = [
-        #     self.llm_tokenizer.eos_token_id,
-        #     self.llm_tokenizer.convert_tokens_to_ids("<|eot_id|>")
-        # ]
-        generate_ids = self.llm.generate(input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask,
-                                         max_new_tokens=max_new_tokens,
-                                         # eos_token_id=terminators,
-                                         do_sample=True, top_k=10,
-                                         temperature=temperature, suppress_tokens=None)
-        # Trim off the prompt
-        generate_ids = generate_ids[:, input_ids.shape[1]:]
-        if generate_ids[0][-1] == self.llm_tokenizer.eos_token_id:
-            generate_ids = generate_ids[:, :-1]
-
-        content = self.llm_tokenizer.batch_decode(generate_ids,
-                                                  skip_special_tokens=False,
-                                                  clean_up_tokenization_spaces=False)[0]
-        content = content.strip()
-        self.logger.debug(f'Joy Output:\n{content}')
-        content_list = str(content).split(".")
-        unique_content = list(dict.fromkeys(content_list))
-        unique_content = '.'.join(unique_content)
-        return unique_content
-
-    def inference(self):
-        image_paths = get_image_paths(logger=self.logger, path=Path(self.args.data_path), recursive=self.args.recursive)
-        pbar = tqdm(total=len(image_paths), initial=1, smoothing=0.0)
-        for image_path in image_paths:
-            try:
-                pbar.set_description('Processing: {}'.format(image_path if len(image_path) <= 40 else
-                                                             image_path[:15]) + ' ... ' + image_path[-20:])
-                joy_caption_file = get_caption_file_path(
-                    self.logger,
-                    data_path=self.args.data_path,
-                    image_path=Path(image_path),
-                    custom_caption_save_path=self.args.custom_caption_save_path,
-                    caption_extension=self.args.llm_caption_extension
-                )
-                # Skip exists
-                if self.args.skip_exists and os.path.isfile(joy_caption_file):
-                    self.logger.warning(f'`skip_exists` ENABLED!!! '
-                                        f'LLM Caption file {joy_caption_file} already exists, Skip this caption.')
-                    continue
-                # Image process
-                image = Image.open(image_path)
-                image = image_process(image, int(self.args.image_size))
-                self.logger.debug(f"Resized image shape: {image.shape}")
-                image = image_process_image(image)
-                # Change user prompt
-                if (self.args.caption_method == "wd+joy"
-                    and not self.args.llm_caption_without_wd
-                    and self.args.run_method == "queue") or (self.args.caption_method == "joy"
-                                                             and self.args.llm_read_wd_caption):
-                    wd_caption_file = get_caption_file_path(
-                        self.logger,
-                        data_path=self.args.data_path,
-                        image_path=Path(image_path),
-                        custom_caption_save_path=self.args.custom_caption_save_path,
-                        caption_extension=self.args.wd_caption_extension
-                    )
-                    if os.path.isfile(wd_caption_file):
-                        self.logger.debug(f'Loading WD caption file: {wd_caption_file}')
-                        with open(wd_caption_file, "r", encoding="utf-8") as wcf:
-                            tag_text = wcf.read()
-                        user_prompt = str(self.args.llm_user_prompt).format(wd_tags=tag_text)
-                    else:
-                        self.logger.warning(f'WD caption file: {wd_caption_file} NOT FOUND!!! '
-                                            f'Inference without WD tags.')
-                        user_prompt = DEFAULT_USER_PROMPT_WITHOUT_WD
-                else:
-                    user_prompt = str(self.args.llm_user_prompt)
-
-                caption = self.get_caption(
-                    image=image,
-                    user_prompt=user_prompt,
-                    temperature=self.args.llm_temperature,
-                    max_new_tokens=self.args.llm_max_tokens
-                )
-
-                if not (self.args.not_overwrite and os.path.isfile(joy_caption_file)):
-                    with open(joy_caption_file, "wt", encoding="utf-8") as f:
+                if not (self.args.not_overwrite and os.path.isfile(llm_caption_file)):
+                    with open(llm_caption_file, "wt", encoding="utf-8") as f:
                         f.write(caption + "\n")
                     self.logger.debug(f"Image path: {image_path}")
-                    self.logger.debug(f"Caption path: {joy_caption_file}")
+                    self.logger.debug(f"Caption path: {llm_caption_file}")
                     self.logger.debug(f"Caption content: {caption}")
                 else:
                     self.logger.warning(f'`not_overwrite` ENABLED!!! '
-                                        f'LLM Caption file {joy_caption_file} already exist! Skip this caption.')
+                                        f'LLM Caption file {llm_caption_file} already exist! Skip this caption.')
 
             except Exception as e:
                 self.logger.error(f"Failed to caption image: {image_path}, skip it.\nerror info: {e}")
@@ -599,28 +463,33 @@ class Joy:
     def unload_model(self) -> bool:
         image_adapter_unloaded = llm_unloaded = clip_model_unloaded = False
         # Unload Image Adapter
-        if self.image_adapter:
-            self.logger.info(f'Unloading Image Adapter...')
-            start = time.monotonic()
-            del self.image_adapter
-            self.logger.info(f'Image Adapter unloaded in {time.monotonic() - start:.1f}s.')
-            image_adapter_unloaded = True
+        if self.models_type == "joy":
+            if hasattr(self, "image_adapter"):
+                self.logger.info(f'Unloading Image Adapter...')
+                start = time.monotonic()
+                del self.image_adapter
+                self.logger.info(f'Image Adapter unloaded in {time.monotonic() - start:.1f}s.')
+                image_adapter_unloaded = True
         # Unload LLM
-        if self.llm:
+        if hasattr(self, "llm"):
             self.logger.info(f'Unloading LLM...')
             start = time.monotonic()
             del self.llm
-            del self.llm_tokenizer
+            if hasattr(self, "llm_processer"):
+                del self.llm_processor
+            if hasattr(self, "llm_tokenizer"):
+                del self.llm_tokenizer
             self.logger.info(f'LLM unloaded in {time.monotonic() - start:.1f}s.')
             llm_unloaded = True
         # Unload CLIP
-        if self.clip_model:
-            self.logger.info(f'Unloading CLIP...')
-            start = time.monotonic()
-            del self.clip_model
-            del self.clip_processor
-            self.logger.info(f'CLIP unloaded in {time.monotonic() - start:.1f}s.')
-            clip_model_unloaded = True
+        if self.models_type == "joy":
+            if hasattr(self, "clip_model"):
+                self.logger.info(f'Unloading CLIP...')
+                start = time.monotonic()
+                del self.clip_model
+                del self.clip_processor
+                self.logger.info(f'CLIP unloaded in {time.monotonic() - start:.1f}s.')
+                clip_model_unloaded = True
 
         return image_adapter_unloaded and llm_unloaded and clip_model_unloaded
 
@@ -918,7 +787,7 @@ class Tagger:
 
     def inference(self):
         image_paths = get_image_paths(logger=self.logger, path=Path(self.args.data_path), recursive=self.args.recursive)
-        pbar = tqdm(total=len(image_paths), initial=1, smoothing=0.0)
+        pbar = tqdm(total=len(image_paths), smoothing=0.0)
         for image_path in image_paths:
             try:
                 pbar.set_description('Processing: {}'.format(image_path if len(image_path) <= 40 else

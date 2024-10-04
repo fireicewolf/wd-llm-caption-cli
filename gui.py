@@ -7,11 +7,13 @@ import gradio as gr
 from PIL import Image
 
 import caption
+from utils import inference
 from utils.image import image_process, image_process_gbr, image_process_image
 
 WD_CONFIG = "configs/default_wd.json"
 JOY_CONFIG = "configs/default_joy.json"
 LLAMA_CONFIG = "configs/default_llama_3.2V.json"
+QWEN_CONFIG = "configs/default_qwen2_vl.json"
 
 SKIP_DOWNLOAD = False
 
@@ -41,7 +43,7 @@ def read_json(config_file):
 with gr.Blocks(title="WD LLM Caption") as demo:
     with gr.Row(equal_height=True):
         with gr.Column(scale=6):
-            gr.Markdown("## Caption images with WD, Joy Caption or Llama 3.2 Vision Instruct")
+            gr.Markdown("## Caption images with WD, Joy Caption, Llama 3.2 Vision Instruct and Qwen2 VL Instruct")
         close_gradio_server_button = gr.Button(value="Close Gradio Server", variant="primary")
 
     with gr.Row():
@@ -67,27 +69,29 @@ with gr.Blocks(title="WD LLM Caption") as demo:
             with gr.Row(equal_height=True):
                 with gr.Column(min_width=240):
                     caption_method = gr.Radio(label="Caption method",
-                                              choices=["wd+llama", "wd+joy", "wd", "joy", "llama"],
-                                              value="wd+llama")
+                                              choices=["WD+Llama", "WD+Joy", "WD+Qwen", "WD", "Joy", "Llama", "Qwen"],
+                                              value="WD+Llama")
                     with gr.Column(min_width=240):
-                        wd_model = gr.Dropdown(label="WD model", choices=read_json(WD_CONFIG),
+                        wd_model = gr.Dropdown(label="WD models", choices=read_json(WD_CONFIG),
                                                value=read_json(WD_CONFIG)[0])
-                        joy_model = gr.Dropdown(label="Joy model", choices=read_json(JOY_CONFIG),
+                        joy_model = gr.Dropdown(label="Joy models", choices=read_json(JOY_CONFIG),
                                                 value=read_json(JOY_CONFIG)[0], visible=False)
-                        llama_model = gr.Dropdown(label="Llama model", choices=read_json(LLAMA_CONFIG),
+                        llama_model = gr.Dropdown(label="Llama models", choices=read_json(LLAMA_CONFIG),
                                                   value=read_json(LLAMA_CONFIG)[0])
+                        qwen_model = gr.Dropdown(label="Qwen models", choices=read_json(QWEN_CONFIG),
+                                                  value=read_json(QWEN_CONFIG)[0])
 
 
                         def llm_update_visibility(caption_method_radio):
-                            run_method_visible = gr.Radio(
-                                visible=True if caption_method_radio in ['wd+llama', 'wd+joy'] else False)
-                            wd_model_visible = gr.Dropdown(visible=True if "wd" in caption_method_radio else False)
-                            joy_model_visible = gr.Dropdown(
-                                visible=True if "joy" in caption_method_radio else False)
-                            llm_use_patch_visible = llama_model_visible = gr.update(
-                                visible=True if "llama" in caption_method_radio else False)
+                            run_method_visible = gr.update(
+                                visible=True if caption_method_radio in ["WD+Llama", "WD+Joy", "WD+Qwen"] else False)
+                            wd_model_visible = gr.update(visible=True if "WD" in caption_method_radio else False)
+                            joy_model_visible = gr.update(visible=True if "Joy" in caption_method_radio else False)
+                            llama_use_patch_visible = llama_model_visible = gr.update(
+                                visible=True if "Llama" in caption_method_radio else False)
+                            qwen_model_visible = gr.update(visible=True if "Qwen" in caption_method_radio else False)
                             return run_method_visible, wd_model_visible, joy_model_visible, llama_model_visible, \
-                                llm_use_patch_visible
+                                llama_use_patch_visible, qwen_model_visible
 
                 with gr.Column(min_width=240):
                     with gr.Column(min_width=240):
@@ -105,10 +109,10 @@ with gr.Blocks(title="WD LLM Caption") as demo:
                     llama_model.select(fn=llm_use_patch_visibility, inputs=llama_model, outputs=llm_use_patch)
 
                     with gr.Column(min_width=240):
-                        llm_dtype = gr.Radio(label="LLM dtype", choices=["fp16", "bf16", "fp32"], value="fp16",
+                        llm_dtype = gr.Radio(label="LLM dtype", choices=["auto", "fp16", "bf16", "fp32"], value="auto",
                                              interactive=True)
-                        llm_qnt = gr.Radio(label="LLM Quantization", choices=["8bit", "4bit", "none"],
-                                           value="none", interactive=True)
+                        llm_qnt = gr.Radio(label="LLM Quantization", choices=["none", "4bit", "8bit"], value="none",
+                                           interactive=True)
 
             with gr.Row():
                 load_model_button = gr.Button(value="Load Models", variant='primary')
@@ -158,19 +162,24 @@ with gr.Blocks(title="WD LLM Caption") as demo:
                                                  value=caption.DEFAULT_USER_PROMPT_WITH_WD)
 
 
-                    def llm_user_prompt_default(caption_method_radio, llm_user_prompt_textbox):
-                        if caption_method_radio not in ["wd+llama", "wd+joy"] \
-                                and llm_user_prompt_textbox == caption.DEFAULT_USER_PROMPT_WITH_WD:
-                            llm_user_prompt_change = gr.Textbox(value=caption.DEFAULT_USER_PROMPT_WITHOUT_WD)
-                        elif caption_method_radio in ["wd+llama", "wd+joy"] \
-                                and llm_user_prompt_textbox == caption.DEFAULT_USER_PROMPT_WITHOUT_WD:
-                            llm_user_prompt_change = gr.Textbox(value=caption.DEFAULT_USER_PROMPT_WITH_WD)
+                    def llm_user_prompt_default(caption_method_radio,
+                                                llm_read_wd_caption_select,
+                                                llm_user_prompt_textbox):
+                        if caption_method_radio not in ["WD+Llama", "WD+Joy", "WD+Qwen"] \
+                                and llm_user_prompt_textbox == inference.DEFAULT_USER_PROMPT_WITH_WD:
+                            llm_user_prompt_change = gr.update(value=inference.DEFAULT_USER_PROMPT_WITHOUT_WD)
+                        elif caption_method_radio in ["WD+Llama", "WD+Joy", "WD+Qwen"] \
+                                and llm_user_prompt_textbox == inference.DEFAULT_USER_PROMPT_WITHOUT_WD:
+                            llm_user_prompt_change = gr.update(value=inference.DEFAULT_USER_PROMPT_WITH_WD)
+                        elif caption_method_radio in ["Llama", "Joy", "Qwen"] and llm_read_wd_caption_select:
+                                llm_user_prompt_change = gr.update(value=inference.DEFAULT_USER_PROMPT_WITHOUT_WD)
                         else:
-                            llm_user_prompt_change = gr.Textbox(value=llm_user_prompt_textbox)
+                            llm_user_prompt_change = gr.update(value=llm_user_prompt_textbox)
                         return llm_user_prompt_change
 
 
-                    caption_method.change(fn=llm_user_prompt_default, inputs=[caption_method, llm_user_prompt],
+                    caption_method.change(fn=llm_user_prompt_default,
+                                          inputs=[caption_method, llm_read_wd_caption, llm_user_prompt],
                                           outputs=llm_user_prompt)
 
                     llm_temperature = gr.Slider(label="temperature for LLM model",
@@ -215,7 +224,8 @@ with gr.Blocks(title="WD LLM Caption") as demo:
                         run_method = gr.Radio(label="Run method", choices=['sync', 'queue'],
                                               value="sync", interactive=True)
                         caption_method.change(fn=llm_update_visibility, inputs=caption_method,
-                                              outputs=[run_method, wd_model, joy_model, llama_model, llm_use_patch])
+                                              outputs=[run_method, wd_model, joy_model,
+                                                       llama_model, llm_use_patch, qwen_model])
                         with gr.Column(min_width=240):
                             skip_exists = gr.Checkbox(label="Will not caption file if caption exists")
                             not_overwrite = gr.Checkbox(label="Will not overwrite caption file if exists")
@@ -225,7 +235,7 @@ with gr.Blocks(title="WD LLM Caption") as demo:
 
 
     def use_wd(check_caption_method):
-        return True if check_caption_method in ["wd+joy", "wd+llama", "wd"] else False
+        return True if check_caption_method in ["wd+joy", "wd+llama", "wd+qwen", "wd"] else False
 
 
     def use_joy(check_caption_method):
@@ -235,9 +245,13 @@ with gr.Blocks(title="WD LLM Caption") as demo:
     def use_llama(check_caption_method):
         return True if check_caption_method in ["wd+llama", "llama"] else False
 
+    def use_qwen(check_caption_method):
+        return True if check_caption_method in ["wd+qwen", "qwen"] else False
+
 
     def load_models_interactive_group():
         return [
+            gr.update(interactive=False),
             gr.update(interactive=False),
             gr.update(interactive=False),
             gr.update(interactive=False),
@@ -256,6 +270,7 @@ with gr.Blocks(title="WD LLM Caption") as demo:
 
     def unloads_models_interactive_group():
         return [
+            gr.update(interactive=True),
             gr.update(interactive=True),
             gr.update(interactive=True),
             gr.update(interactive=True),
@@ -333,6 +348,7 @@ with gr.Blocks(title="WD LLM Caption") as demo:
             wd_model_value,
             joy_model_value,
             llama_model_value,
+            qwen_model_value,
             wd_force_use_cpu_value,
             llm_use_cpu_value,
             llm_use_patch_value,
@@ -354,7 +370,7 @@ with gr.Blocks(title="WD LLM Caption") as demo:
 
             get_gradio_args = gui_setup_args()
             args.log_level = str(get_gradio_args.log_level)
-            args.caption_method = str(caption_method_value)
+            args.caption_method = str(caption_method_value).lower()
 
             if use_wd(args.caption_method):
                 args.wd_config = WD_CONFIG
@@ -365,6 +381,9 @@ with gr.Blocks(title="WD LLM Caption") as demo:
             elif use_llama(args.caption_method):
                 args.llm_config = LLAMA_CONFIG
                 args.llm_model_name = str(llama_model_value)
+            elif use_qwen(args.caption_method):
+                args.llm_config = QWEN_CONFIG
+                args.llm_model_name = str(qwen_model_value)
 
             if CAPTION_FN is None:
                 CAPTION_FN = caption.Caption(ARGS)
@@ -461,20 +480,10 @@ with gr.Blocks(title="WD LLM Caption") as demo:
             tag_text, rating_tag_text, character_tag_text, general_tag_text = get_caption_fn.my_tagger.get_tags(
                 image=wd_image)
 
-        if use_joy(args.caption_method):
+        if use_joy(args.caption_method) or use_llama(args.caption_method) or use_qwen(args.caption_method):
             llm_image = image_process(image, args.image_size)
             llm_image = image_process_image(llm_image)
-            caption_text = get_caption_fn.my_joy.get_caption(
-                image=llm_image,
-                user_prompt=str(args.llm_user_prompt).format(wd_tags=tag_text)
-                if args.llm_read_wd_caption else str(args.llm_user_prompt),
-                temperature=args.llm_temperature,
-                max_new_tokens=args.llm_max_tokens
-            )
-        elif use_llama(args.caption_method):
-            llm_image = image_process(image, args.image_size)
-            llm_image = image_process_image(llm_image)
-            caption_text = get_caption_fn.my_llama.get_caption(
+            caption_text = get_caption_fn.my_llm.get_caption(
                 image=llm_image,
                 system_prompt=str(args.llm_system_prompt),
                 user_prompt=str(args.llm_user_prompt).format(wd_tags=tag_text)
@@ -577,12 +586,12 @@ with gr.Blocks(title="WD LLM Caption") as demo:
     load_model_button.click(fn=caption_models_load,
                             inputs=[model_site, huggingface_token,
                                     caption_method,
-                                    wd_model, joy_model, llama_model,
+                                    wd_model, joy_model, llama_model, qwen_model,
                                     wd_force_use_cpu,
                                     llm_use_cpu, llm_use_patch, llm_dtype, llm_qnt],
                             outputs=[model_site, huggingface_token,
                                      caption_method,
-                                     wd_model, joy_model, llama_model,
+                                     wd_model, joy_model, llama_model, qwen_model,
                                      wd_force_use_cpu,
                                      llm_use_cpu, llm_use_patch, llm_dtype, llm_qnt,
                                      load_model_button, unload_model_button])
@@ -590,7 +599,7 @@ with gr.Blocks(title="WD LLM Caption") as demo:
     unload_model_button.click(fn=caption_unload_models,
                               outputs=[model_site, huggingface_token,
                                        caption_method,
-                                       wd_model, joy_model, llama_model,
+                                       wd_model, joy_model, llama_model, qwen_model,
                                        wd_force_use_cpu,
                                        llm_use_cpu, llm_use_patch, llm_dtype, llm_qnt,
                                        load_model_button, unload_model_button])

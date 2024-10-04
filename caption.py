@@ -10,7 +10,7 @@ from tqdm import tqdm
 from utils.download import download_models
 from utils.image import get_image_paths, image_process, image_process_image, image_process_gbr
 from utils.inference import DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_PROMPT_WITHOUT_WD, DEFAULT_USER_PROMPT_WITH_WD
-from utils.inference import get_caption_file_path, Llama, Joy, Tagger
+from utils.inference import get_caption_file_path, LLM, Tagger
 from utils.logger import Logger
 
 
@@ -20,25 +20,20 @@ class Caption:
             args: argparse.Namespace
     ):
         # Set flags
-        self.use_wd = True if args.caption_method in ["wd+joy", "wd+llama", "wd"] else False
+
+        self.use_wd = True if args.caption_method in ["wd+joy", "wd+llama", "wd+qwen", "wd"] else False
         self.use_joy = True if args.caption_method in ["wd+joy", "joy"] else False
         self.use_llama = True if args.caption_method in ["wd+llama", "llama"] else False
+        self.use_qwen = True if args.caption_method in ["wd+qwen", "qwen"] else False
 
         self.my_logger = None
 
         self.wd_model_path = None
         self.wd_tags_csv_path = None
-
-        self.image_adapter_path = None
-        self.clip_path = None
-        self.llm_path = None
-
-        self.llama_path = None
-        self.llama_patch_path = None
+        self.llm_models_paths = None
 
         self.my_tagger = None
-        self.my_joy = None
-        self.my_llama = None
+        self.my_llm = None
 
         # Set logger
         workspace_path = os.path.dirname(__file__)
@@ -89,7 +84,7 @@ class Caption:
 
         if self.use_wd:
             # Check wd models path from json
-            if args.wd_config is None:
+            if not args.wd_config:
                 wd_config_file = os.path.join(Path(__file__).parent, 'configs', 'default_wd.json')
             else:
                 wd_config_file = Path(args.wd_config)
@@ -105,13 +100,13 @@ class Caption:
 
         if self.use_joy:
             # Check joy models path from json
-            if args.llm_config is None:
+            if not args.llm_config:
                 llm_config_file = os.path.join(Path(__file__).parent, 'configs', 'default_joy.json')
             else:
                 llm_config_file = Path(args.llm_config)
 
             # Download joy models
-            self.image_adapter_path, self.clip_path, self.llm_path = download_models(
+            self.llm_models_paths = download_models(
                 logger=self.my_logger,
                 models_type="joy",
                 args=args,
@@ -121,14 +116,14 @@ class Caption:
 
         elif self.use_llama:
             # Check joy models path from json
-            if args.llm_config is None:
+            if not args.llm_config:
                 llm_config_file = os.path.join(Path(__file__).parent, 'configs', 'default_llama_3.2V.json')
             else:
                 llm_config_file = Path(args.llm_config)
 
-            # Download joy models
+            # Download Llama models
             if args.llm_patch:
-                self.llama_path, self.llama_patch_path = download_models(
+                self.llm_models_paths = download_models(
                     logger=self.my_logger,
                     models_type="llama",
                     args=args,
@@ -136,13 +131,27 @@ class Caption:
                     models_save_path=models_save_path,
                 )
             else:
-                self.llama_path = download_models(
+                self.llm_models_paths = download_models(
                     logger=self.my_logger,
                     models_type="llama",
                     args=args,
                     config_file=llm_config_file,
                     models_save_path=models_save_path,
                 )
+        elif self.use_qwen:
+            if not args.llm_config:
+                llm_config_file = os.path.join(Path(__file__).parent, 'configs', 'default_qwen2_vl.json')
+            else:
+                llm_config_file = Path(args.llm_config)
+
+            # Download Qwen models
+            self.llm_models_paths = download_models(
+                logger=self.my_logger,
+                models_type="qwen",
+                args=args,
+                config_file=llm_config_file,
+                models_save_path=models_save_path,
+            )
 
     def load_models(
             self,
@@ -159,24 +168,32 @@ class Caption:
             self.my_tagger.load_model()
 
         if self.use_joy:
-            # Load joy models
-            self.my_joy = Joy(
+            # Load Joy models
+            self.my_llm = LLM(
                 logger=self.my_logger,
+                models_type="joy",
+                models_paths=self.llm_models_paths,
                 args=args,
-                image_adapter_path=self.image_adapter_path,
-                clip_path=self.clip_path,
-                llm_path=self.llm_path
             )
-            self.my_joy.load_model()
-
+            self.my_llm.load_model()
         elif self.use_llama:
-            self.my_llama = Llama(
+            # Load Llama models
+            self.my_llm = LLM(
                 logger=self.my_logger,
+                models_type="llama",
+                models_paths=self.llm_models_paths,
                 args=args,
-                llm_path=self.llama_path,
-                llama_patch_path=self.llama_patch_path if args.llm_patch and self.llama_patch_path else None
             )
-            self.my_llama.load_model()
+            self.my_llm.load_model()
+        elif self.use_qwen:
+            # Load Qwen models
+            self.my_llm = LLM(
+                logger=self.my_logger,
+                models_type="qwen",
+                models_paths=self.llm_models_paths,
+                args=args,
+            )
+            self.my_llm.load_model()
 
     def run_inference(
             self,
@@ -184,7 +201,7 @@ class Caption:
     ):
         start_inference_time = time.monotonic()
         # Inference
-        if self.use_wd and (self.use_joy or self.use_llama):
+        if self.use_wd and (self.use_joy or self.use_llama or self.use_qwen):
             # Set joy user prompt
             if args.llm_user_prompt == DEFAULT_USER_PROMPT_WITHOUT_WD:
                 if not args.llm_caption_without_wd:
@@ -194,7 +211,7 @@ class Caption:
             if args.run_method == "sync":
                 image_paths = get_image_paths(logger=self.my_logger, path=Path(args.data_path),
                                               recursive=args.recursive)
-                pbar = tqdm(total=len(image_paths), initial=1, smoothing=0.0)
+                pbar = tqdm(total=len(image_paths), smoothing=0.0)
                 for image_path in image_paths:
                     try:
                         pbar.set_description('Processing: {}'.format(image_path if len(image_path) <= 40 else
@@ -254,23 +271,13 @@ class Caption:
                             self.my_logger.debug(f"Resized image shape: {llm_image.shape}")
                             llm_image = image_process_image(llm_image)
                             # LLM Caption
-                            caption = ""
-                            if self.use_joy:
-                                caption = self.my_joy.get_caption(
-                                    image=llm_image,
-                                    user_prompt=str(args.llm_user_prompt).format(wd_tags=tag_text),
-                                    temperature=args.llm_temperature,
-                                    max_new_tokens=args.llm_max_tokens
-                                )
-                            elif self.use_llama:
-                                caption = self.my_llama.get_caption(
-                                    image=llm_image,
-                                    system_prompt=str(args.llm_system_prompt),
-                                    user_prompt=str(args.llm_user_prompt).format(wd_tags=tag_text),
-                                    temperature=args.llm_temperature,
-                                    max_new_tokens=args.llm_max_tokens
-                                )
-
+                            caption = self.my_llm.get_caption(
+                                image=llm_image,
+                                system_prompt=str(args.llm_system_prompt),
+                                user_prompt=str(args.llm_user_prompt).format(wd_tags=tag_text),
+                                temperature=args.llm_temperature,
+                                max_new_tokens=args.llm_max_tokens
+                            )
                             if not (args.not_overwrite and os.path.isfile(llm_caption_file)):
                                 # Write LLM Caption
                                 with open(llm_caption_file, "wt", encoding="utf-8") as f:
@@ -307,20 +314,19 @@ class Caption:
                 pbar.update(1)
                 if self.use_joy:
                     pbar.set_description('Processing with joy model...')
-                    self.my_joy.inference()
-                    pbar.update(1)
                 elif self.use_llama:
                     pbar.set_description('Processing with Llama model...')
-                    self.my_llama.inference()
-                    pbar.update(1)
+                elif self.use_qwen:
+                    pbar.set_description('Processing with Qwen model...')
+                self.my_llm.inference()
+                pbar.update(1)
+
                 pbar.close()
         else:
             if self.use_wd:
                 self.my_tagger.inference()
-            if self.use_joy and not self.use_llama:
-                self.my_joy.inference()
-            elif not self.use_joy and self.use_llama:
-                self.my_llama.inference()
+            elif self.use_joy or self.use_llama or self.use_qwen:
+                self.my_llm.inference()
 
         total_inference_time = time.monotonic() - start_inference_time
         days = total_inference_time // (24 * 3600)
@@ -332,7 +338,7 @@ class Caption:
         days = f"{days} Day(s) " if days > 0 else ""
         hours = f"{hours} Hour(s) " if hours > 0 or (days and hours == 0) else ""
         minutes = f"{minutes} Min(s) " if minutes > 0 or (hours and minutes == 0) else ""
-        seconds = f"{seconds} Sec(s)"
+        seconds = f"{seconds:.1f} Sec(s)"
         self.my_logger.info(f"All work done with in {days}{hours}{minutes}{seconds}.")
 
     def unload_models(
@@ -341,10 +347,8 @@ class Caption:
         # Unload models
         if self.use_wd:
             self.my_tagger.unload_model()
-        if self.use_joy:
-            self.my_joy.unload_model()
-        if self.use_llama:
-            self.my_llama.unload_model()
+        if self.use_joy or self.use_llama or self.use_qwen:
+            self.my_llm.unload_model()
 
 
 def setup_args() -> argparse.Namespace:
@@ -412,6 +416,50 @@ def setup_args() -> argparse.Namespace:
         '--skip_download',
         action='store_true',
         help='skip download if exists.'
+    )
+
+    caption_args = args.add_argument_group("Caption")
+    caption_args.add_argument(
+        '--caption_method',
+        type=str,
+        default='wd+llama',
+        choices=['wd+llama', 'wd+joy', 'wd+qwen', 'wd', 'joy', 'llama', 'qwen'],
+        help='method for caption[`wd+llama`, `wd+joy`, `wd+qwen`, `wd`, `joy`, `llama`, `qwen`], select wd or llm models, or both of them to caption, '
+             'default is `wd+llama`.',
+    )
+    caption_args.add_argument(
+        '--run_method',
+        type=str,
+        default='sync',
+        choices=['sync', 'queue'],
+        help='''running method for wd+llm caption[`sync`, `queue`], need `caption_method` set to `wd+llama` or `wd+joy`.
+             if sync, image will caption with wd models,
+             then caption with joy models while wd captions in joy user prompt.
+             if queue, all images will caption with wd models first,
+             then caption all of them with joy models while wd captions in joy user prompt.
+             default is `sync`.'''
+    )
+    caption_args.add_argument(
+        '--image_size',
+        type=int,
+        default=1024,
+        help='resize image to suitable, default is `1024`.'
+    )
+    caption_args.add_argument(
+        '--skip_exists',
+        action='store_true',
+        help='not caption file if caption exists.'
+    )
+    caption_args.add_argument(
+        '--not_overwrite',
+        action='store_true',
+        help='not overwrite caption file if exists.'
+    )
+    caption_args.add_argument(
+        '--custom_caption_save_path',
+        type=str,
+        default=None,
+        help='custom caption file save path.'
     )
 
     wd_args = args.add_argument_group("WD Caption")
@@ -540,9 +588,9 @@ def setup_args() -> argparse.Namespace:
     llm_args.add_argument(
         '--llm_dtype',
         type=str,
-        choices=["fp16", "bf16", "fp32"],
+        choices=["auto", "fp16", "bf16", "fp32"],
         default='fp16',
-        help='choice joy LLM load dtype, default is `fp16`.'
+        help='choice joy LLM load dtype, default is `auto`.'
     )
     llm_args.add_argument(
         '--llm_qnt',
@@ -560,7 +608,7 @@ def setup_args() -> argparse.Namespace:
     llm_args.add_argument(
         '--llm_read_wd_caption',
         action='store_true',
-        help='LLM will read wd tags for inference.\nOnly effect when `caption_method` only used joy or llama models'
+        help='LLM will read wd tags for inference.\nOnly effect when `caption_method` only used joy, llama or qwen models'
     )
     llm_args.add_argument(
         '--llm_caption_without_wd',
@@ -589,51 +637,7 @@ def setup_args() -> argparse.Namespace:
         '--llm_max_tokens',
         type=int,
         default=300,
-        help='max tokens for LLM model output, default is `512`.'
-    )
-
-    caption_args = args.add_argument_group("Caption")
-    caption_args.add_argument(
-        '--caption_method',
-        type=str,
-        default='wd+llama',
-        choices=['wd+llama', 'wd+joy', 'wd', 'joy', 'llama'],
-        help='method for caption[`wd+llama`, `wd+joy`,`wd`, `joy`, `llama`],select wd or llm models, or both of them to caption, '
-             'default is `wd+llama`.',
-    )
-    caption_args.add_argument(
-        '--run_method',
-        type=str,
-        default='sync',
-        choices=['sync', 'queue'],
-        help='''running method for wd+llm caption[`sync`, `queue`], need `caption_method` set to `wd+llama` or `wd+joy`.
-             if sync, image will caption with wd models,
-             then caption with joy models while wd captions in joy user prompt.
-             if queue, all images will caption with wd models first,
-             then caption all of them with joy models while wd captions in joy user prompt.
-             default is `sync`.'''
-    )
-    caption_args.add_argument(
-        '--image_size',
-        type=int,
-        default=1024,
-        help='resize image to suitable, default is `1024`.'
-    )
-    caption_args.add_argument(
-        '--skip_exists',
-        action='store_true',
-        help='not caption file if caption exists.'
-    )
-    caption_args.add_argument(
-        '--not_overwrite',
-        action='store_true',
-        help='not overwrite caption file if exists.'
-    )
-    caption_args.add_argument(
-        '--custom_caption_save_path',
-        type=str,
-        default=None,
-        help='custom caption file save path.'
+        help='max tokens for LLM model output, default is `300`.'
     )
 
     gradio_args = args.add_argument_group("Gradio dummy args")
