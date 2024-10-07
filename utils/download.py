@@ -75,7 +75,7 @@ def download_models(
         args: argparse.Namespace,
         config_file: Path,
         models_save_path: Path,
-) -> tuple[Path]:
+) -> tuple[Path] | tuple[Path, Path] | tuple[Path, Path, Path]:
     if os.path.isfile(config_file):
         logger.info(f'Using config: {str(config_file)}')
     else:
