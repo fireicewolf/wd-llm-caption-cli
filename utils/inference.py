@@ -111,7 +111,7 @@ class LLM:
             self.llm_tokenizer = None
 
         elif self.models_type == "llama":
-            if len(models_paths) != 1 or (self.args.llm_patch and len(models_paths) != 2):
+            if (not self.args.llm_patch and len(models_paths) != 1) or (self.args.llm_patch and len(models_paths) != 2):
                 self.logger.error(self.logger.error(f"Invalid models paths: {models_paths}!!!"))
                 raise ValueError
 
@@ -119,7 +119,6 @@ class LLM:
 
             if self.args.llm_patch:
                 self.llm_patch_path = models_paths[1]
-                self.llm_patch = None
 
             self.llm_processor = None
 
