@@ -7,7 +7,7 @@ from typing import Union, Optional
 import requests
 from tqdm import tqdm
 
-from utils.logger import Logger
+from .logger import Logger
 
 
 def url_download(
@@ -50,8 +50,8 @@ def url_download(
         pbar.close()
 
     if not force_download and os.path.isfile(local_file):
-        if os.path.exists(local_file) and skip_local_file_exist:
-            logger.info(f"`skip_local_file_exist` is Enable, Skipping download {local_file}...")
+        if skip_local_file_exist and os.path.exists(local_file):
+            logger.info(f"`skip_local_file_exist` is Enable, Skipping download {filename}...")
         else:
             if total_size == 0:
                 logger.info(
@@ -177,15 +177,21 @@ def download_models(
                             force_download=force_download
                         )
                     elif model_site == "modelscope":
-                        logger.info(f'Will download "{filename}" from modelscope repo: "{sub_model_info["repo_id"]}".')
-                        sub_model_path = model_file_download(
-                            model_id=sub_model_info["repo_id"],
-                            file_path=filename if sub_model_info["subfolder"] == ""
-                            else os.path.join(sub_model_info["subfolder"], filename),
-                            revision=sub_model_info["revision"],
-                            local_files_only=skip_local_file_exist,
-                            local_dir=os.path.join(models_save_path, sub_model_name) if not use_sdk_cache else None,
-                        )
+                        local_file = os.path.join(models_save_path, sub_model_name, filename)
+                        if skip_local_file_exist and os.path.exists(local_file):
+                            logger.info(f"`skip_local_file_exist` is Enable, Skipping download {filename}...")
+                            sub_model_path = local_file
+                        else:
+                            logger.info(
+                                f'Will download "{filename}" from modelscope repo: "{sub_model_info["repo_id"]}".')
+                            sub_model_path = model_file_download(
+                                model_id=sub_model_info["repo_id"],
+                                file_path=filename if sub_model_info["subfolder"] == ""
+                                else os.path.join(sub_model_info["subfolder"], filename),
+                                revision=sub_model_info["revision"],
+                                local_files_only=False,
+                                local_dir=os.path.join(models_save_path, sub_model_name) if not use_sdk_cache else None,
+                            )
                 else:
                     model_url = sub_model_info["file_list"][filename]
                     logger.info(f'Will download model from url: {model_url}')

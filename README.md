@@ -1,8 +1,8 @@
 # WD LLM Caption Cli
 
 A Python base cli tool for caption images
-with [WD series](https://huggingface.co/SmilingWolf), [joy-caption-pre-alpha](https://huggingface.co/spaces/fancyfeast/joy-caption-pre-alpha)
-and [LLama3.2 Vision Instruct](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision-Instruct) models.
+with [WD series](https://huggingface.co/SmilingWolf), [joy-caption-pre-alpha](https://huggingface.co/spaces/fancyfeast/joy-caption-pre-alpha), [LLama3.2 Vision Instruct](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision-Instruct)
+and [Qwen2 VL Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct)models.
 
 ## Introduce
 
@@ -11,7 +11,25 @@ This tool can make a caption with danbooru style tags or a nature language descr
 
 ### New Changes:
 
+#### 2024.10.09: Build in wheel, now you install this repo from pypi.
+
+```shell
+# Install torch base on your GPU driver. e.g.
+pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cu124
+# Install via pip from pypi
+pip install wd_llm_caption
+# For CUDA 11.8
+pip install -U -r requirements_onnx_cu118.txt
+# For CUDA 12.X
+pip install -U -r requirements_onnx_cu12x.txt
+# CLI
+wd-llm-caption --data_path your_data_path
+# GUI
+wd-llm-caption-gui
+```
+
 #### 2024.10.04: Add Qwen2 VL support.
+
 #### 2024.09.30: A simple gui run through gradio now😊
 
 <img alt="DEMO_her.jpg" src="DEMO/DEMO_GUI.png" width="300"/>
@@ -180,6 +198,7 @@ pip install -U -r requirements_modelscope.txt
 ```shell
 python gui.py
 ```
+
 ### GUI options
 
 `--port`  
