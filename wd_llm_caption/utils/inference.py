@@ -8,8 +8,8 @@ import numpy
 from PIL import Image
 from tqdm import tqdm
 
-from utils.image import image_process, image_process_gbr, image_process_image, get_image_paths
-from utils.logger import Logger
+from .image import image_process, image_process_gbr, image_process_image, get_image_paths
+from .logger import Logger
 
 kaomojis = [
     "0_0",
@@ -186,7 +186,7 @@ class LLM:
         if self.args.llm_qnt == "4bit":
             qnt_config = BitsAndBytesConfig(load_in_4bit=True,
                                             bnb_4bit_quant_type="nf4",
-                                            bnb_4bit_compute_dtype=llm_dtype,
+                                            bnb_4bit_compute_dtype=torch.float16 if llm_dtype == "auto" else llm_dtype,
                                             bnb_4bit_use_double_quant=True)
             self.logger.info(f'LLM 4bit quantization: Enabled')
         elif self.args.llm_qnt == "8bit":
@@ -292,7 +292,7 @@ class LLM:
         device = "cpu" if self.args.llm_use_cpu else "cuda"
         # Cleaning VRAM cache
         if not self.args.llm_use_cpu:
-            self.logger.info(f'Will empty cuda device cache...')
+            self.logger.debug(f'Will empty cuda device cache...')
             torch.cuda.empty_cache()
 
         if self.models_type == "joy":
@@ -336,16 +336,20 @@ class LLM:
             # Generate caption
             self.logger.debug(f'LLM temperature is {temperature}')
             self.logger.debug(f'LLM max_new_tokens is {max_new_tokens}')
-            generate_ids = self.llm.generate(input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask,
+            generate_ids = self.llm.generate(input_ids,
+                                             inputs_embeds=inputs_embeds,
+                                             attention_mask=attention_mask,
                                              max_new_tokens=max_new_tokens,
                                              do_sample=True, top_k=10,
-                                             temperature=temperature, suppress_tokens=None)
+                                             temperature=temperature,
+                                             suppress_tokens=None)
             # Trim off the prompt
             generate_ids = generate_ids[:, input_ids.shape[1]:]
             if generate_ids[0][-1] == self.llm_tokenizer.eos_token_id:
                 generate_ids = generate_ids[:, :-1]
 
-            content = self.llm_tokenizer.batch_decode(generate_ids, skip_special_tokens=False,
+            content = self.llm_tokenizer.batch_decode(generate_ids,
+                                                      skip_special_tokens=False,
                                                       clean_up_tokenization_spaces=False)[0]
             content = content.strip()
         else:
@@ -369,7 +373,9 @@ class LLM:
             self.logger.debug(f"\nChat_template:\n{messages}")
             input_text = self.llm_processor.apply_chat_template(messages, add_generation_prompt=True)
             inputs = self.llm_processor(image, input_text,
-                                        add_special_tokens=False, return_tensors="pt").to(self.llm.device)
+                                        add_special_tokens=False,
+                                        padding=True,
+                                        return_tensors="pt").to(self.llm.device)
             # Generate caption
             self.logger.debug(f'LLM temperature is {temperature}')
             self.logger.debug(f'LLM max_new_tokens is {max_new_tokens}')
@@ -380,7 +386,6 @@ class LLM:
             content = self.llm_processor.decode(output[0][inputs["input_ids"].shape[-1]:],
                                                 skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
-        self.logger.debug(f'LLM Output:\n{content}')
         content_list = str(content).split(".")
         unique_content = list(dict.fromkeys(content_list))
         unique_content = '.'.join(unique_content)
@@ -572,7 +577,7 @@ class Tagger:
             self.logger.error(f'{str(tags_csv_path)} NOT FOUND!')
             raise FileNotFoundError
 
-        self.logger.info(f'Loading tags from {tags_csv_path}')
+        self.logger.debug(f'Loading tags from {tags_csv_path}')
         with open(tags_csv_path, 'r', encoding='utf-8') as csv_file:
             csv_content = csv.reader(csv_file)
             rows = [row for row in csv_content]

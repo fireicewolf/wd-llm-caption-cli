@@ -1,8 +1,8 @@
 # WD LLM Caption Cli
 
 A Python base cli tool for caption images
-with [WD series](https://huggingface.co/SmilingWolf), [joy-caption-pre-alpha](https://huggingface.co/spaces/fancyfeast/joy-caption-pre-alpha)
-and [LLama3.2 Vision Instruct](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision-Instruct) models.
+with [WD series](https://huggingface.co/SmilingWolf), [joy-caption-pre-alpha](https://huggingface.co/spaces/fancyfeast/joy-caption-pre-alpha), [LLama3.2 Vision Instruct](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision-Instruct)
+and [Qwen2 VL Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct)models.
 
 ## Introduce
 
@@ -11,8 +11,28 @@ This tool can make a caption with danbooru style tags or a nature language descr
 
 ### New Changes:
 
+#### 2024.10.09: Build in wheel, now you install this repo from pypi.
+
+```shell
+# Install torch base on your GPU driver. e.g.
+pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cu124
+# Install via pip from pypi
+pip install wd_llm_caption
+# For CUDA 11.8
+pip install -U -r requirements_onnx_cu118.txt
+# For CUDA 12.X
+pip install -U -r requirements_onnx_cu12x.txt
+# CLI
+wd-llm-caption --data_path your_data_path
+# GUI
+wd-llm-caption-gui
+```
+
 #### 2024.10.04: Add Qwen2 VL support.
-#### 2024.09.30: A simple gui run through gradio now(Please use [gui branch](https://github.com/fireicewolf/wd-llm-caption-cli/tree/gui))😊
+
+#### 2024.09.30: A simple gui run through gradio now😊
+
+<img alt="DEMO_her.jpg" src="DEMO/DEMO_GUI.png" width="300"/>
 
 ## Example
 
@@ -156,13 +176,14 @@ pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cu124
 # Base dependencies, models for inference will download via python request libs.
 # For WD Caption
 pip install -U -r requirements_wd.txt
+
 # If you want load WD models with GPU.
 # For CUDA 11.8
 pip install -U -r requirements_onnx_cu118.txt
 # For CUDA 12.X
 pip install -U -r requirements_onnx_cu12x.txt
 
-# For Joy Caption
+# For Joy Caption or Llama 3.2 Vision Instruct or Qwen2 VL Instruct
 pip install -U -r requirements_llm.txt
 
 # If you want to download or cache model via huggingface hub, install this.
@@ -172,7 +193,27 @@ pip install -U -r requirements_huggingface.txt
 pip install -U -r requirements_modelscope.txt
 ```
 
-## Simple usage
+## GUI Usage
+
+```shell
+python gui.py
+```
+
+### GUI options
+
+`--port`  
+gradio webui port, default is `8282`  
+`--listen`  
+allow gradio remote connections  
+`--share`  
+allow gradio share  
+`--inbrowser`
+auto open in browser  
+`--log_level`  
+set log level [`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`],  
+default is `INFO`
+
+## CLI Simple Usage
 
 Default will use both wd and llm caption to caption images,  
 Llama-3.2-11B-Vision-Instruct on Hugging Face is a gated models.  
@@ -209,7 +250,7 @@ os.environ["HF_TOKEN"] = "yourhftoken"
 __Make sure your python venv has been activated first!__
 
 ```shell
-python caption.py your_datasets_path
+python caption.py --data_path your_datasets_path
 ```
 
 To run with more options, You can find help by run with this or see at [Options](#options)
@@ -218,11 +259,12 @@ To run with more options, You can find help by run with this or see at [Options]
 python caption.py -h
 ```
 
-## <span id="options">Options</span>
+### <span id="options">Options</span>
 
 <details>
     <summary>Advance options</summary>
-`data_path`
+
+`--data_path`
 
 path where your datasets place
 

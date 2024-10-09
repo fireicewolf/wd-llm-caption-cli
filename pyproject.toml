@@ -1,0 +1,90 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["wd_llm_caption*", "wd_llm_caption/configs/*.json"]
+
+[tool.setuptools.dynamic]
+version = { file = "VERSION" }
+
+#[tool.setuptools_scm]
+#write_to = "wd_llm_caption/version.py"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 119
+indent-width = 4
+
+[tool.ruff.lint]
+ignore = ["C408", "C901", "E501", "E731", "E741", "W605"]
+select = ["C", "E", "F", "I", "W"]
+
+[tool.ruff.lint.isort]
+lines-after-imports = 2
+known-first-party = ["wd_llm_caption"]
+known-third-party = [
+    "cv2",
+    "huggingface_hub",
+    "modelscope",
+    "numpy",
+    "requests",
+    "PIL",
+    "tqdm",
+    "peft",
+    "torch",
+    "transformers"
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[project]
+name = "wd-llm-caption"
+dynamic = ["version"]
+authors = [
+    { name = "DukeG", email = "fireicewolf@gmail.com" },
+]
+description = "A Python base cli tool for caption images with WD series, Joy-caption-pre-alpha,meta Llama 3.2 Vision Instruct and Qwen2 VL Instruct models."
+readme = "README.md"
+keywords = ["image-caption", "WD", "Llama 3.2 Vision Instruct", "Qwen2 VL Instruct", "Joy Caption Alpha"]
+license = { file = 'LICENSE' }
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "opencv-python-headless==4.10.0.84",
+    "pillow==10.4.0",
+    "requests==2.32.3",
+    "tqdm==4.66.5",
+    "accelerate>=0.34.2",
+    "bitsandbytes>=0.42.0",
+    "peft==0.13.0",
+    "sentencepiece==0.2.0",
+    "transformers==4.45.2",
+    "torch>=2.1.0",
+    "onnx==1.17.0",
+    "onnxruntime==1.19.2",
+    "huggingface_hub>=0.25.1",
+    "modelscope>=1.18.1",
+    "gradio>=4.44.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/fireicewolf/wd-llm-caption-cli"
+Issues = "https://github.com/fireicewolf/wd-llm-caption-cli/issues"
+
+[project.scripts]
+wd-llm-caption = "wd_llm_caption.caption:main"
+wd-llm-caption-gui = "wd_llm_caption.gui:gui"
