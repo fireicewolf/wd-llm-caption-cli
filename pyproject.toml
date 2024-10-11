@@ -26,6 +26,7 @@ known-first-party = ["wd_llm_caption"]
 known-third-party = [
     "cv2",
     "huggingface_hub",
+    "gradio",
     "modelscope",
     "numpy",
     "requests",
@@ -49,9 +50,9 @@ dynamic = ["version"]
 authors = [
     { name = "DukeG", email = "fireicewolf@gmail.com" },
 ]
-description = "A Python base cli tool for caption images with WD series, Joy-caption-pre-alpha,meta Llama 3.2 Vision Instruct and Qwen2 VL Instruct models."
+description = "A Python base cli tool for caption images with WD series, Joy-caption-pre-alpha, meta Llama 3.2 Vision Instruct, Qwen2 VL Instruct and Mini-CPM V2.6 models."
 readme = "README.md"
-keywords = ["image-caption", "WD", "Llama 3.2 Vision Instruct", "Qwen2 VL Instruct", "Joy Caption Alpha"]
+keywords = ["image-caption", "WD", "Llama 3.2 Vision Instruct", "Qwen2 VL Instruct", "Mini-CPM V2.6", "Joy Caption Alpha"]
 license = { file = 'LICENSE' }
 requires-python = ">=3.10"
 classifiers = [
@@ -64,13 +65,14 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
+    "numpy>=1.26.4,<2.0.0",
     "opencv-python-headless==4.10.0.84",
     "pillow==10.4.0",
     "requests==2.32.3",
     "tqdm==4.66.5",
     "accelerate>=0.34.2",
     "bitsandbytes>=0.42.0",
-    "peft==0.13.0",
+    "peft==0.13.2",
     "sentencepiece==0.2.0",
     "transformers==4.45.2",
     "torch>=2.1.0",
@@ -78,7 +80,7 @@ dependencies = [
     "onnxruntime==1.19.2",
     "huggingface_hub>=0.25.1",
     "modelscope>=1.18.1",
-    "gradio>=4.44.0"
+    "gradio>=5.0.2"
 ]
 
 [project.urls]

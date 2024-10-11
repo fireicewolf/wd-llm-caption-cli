@@ -28,6 +28,7 @@
       "llm": {
         "repo_id": "Qwen/Qwen2-VL-7B-Instruct",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "merges.txt": "https://www.modelscope.cn/models/qwen/qwen2-vl-7b-instruct/resolve/master/merges.txt",
@@ -110,6 +111,7 @@
       "llm": {
         "repo_id": "Qwen/Qwen2-VL-72B-Instruct",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "merges.txt": "https://www.modelscope.cn/models/Qwen/Qwen2-VL-72B-Instruct/resolve/master/merges.txt",

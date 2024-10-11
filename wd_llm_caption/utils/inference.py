@@ -89,7 +89,7 @@ class LLM:
             args: Namespace,
     ):
         self.logger = logger
-        if models_type in ["llama", "joy", "qwen"]:
+        if models_type in ["llama", "joy", "qwen", "minicpm"]:
             self.models_type = models_type
         else:
             self.logger.error(f"Invalid model type: {models_type}!!!")
@@ -122,14 +122,14 @@ class LLM:
 
             self.llm_processor = None
 
-        elif self.models_type == "qwen":
+        elif self.models_type in ["qwen", "minicpm"]:
             if len(models_paths) != 1:
                 self.logger.error(self.logger.error(f"Invalid models paths: {models_paths}!!!"))
                 raise ValueError
 
             self.llm_path = models_paths[0]
-
             self.llm_processor = None
+            self.llm_tokenizer = None
 
         self.llm = None
 
@@ -144,14 +144,16 @@ class LLM:
             raise ImportError
         # Import transformers
         try:
-            from transformers import (AutoProcessor, AutoTokenizer, BitsAndBytesConfig)
+            from transformers import AutoProcessor, AutoTokenizer, BitsAndBytesConfig
             if self.models_type == "joy":
-                from transformers import (AutoModel, AutoModelForCausalLM, PreTrainedTokenizer, PreTrainedTokenizerFast)
+                from transformers import AutoModel, AutoModelForCausalLM, PreTrainedTokenizer, PreTrainedTokenizerFast
             elif self.models_type == "llama":
                 from transformers import MllamaForConditionalGeneration
                 from peft import PeftConfig, PeftModel
             elif self.models_type == "qwen":
                 from transformers import Qwen2VLForConditionalGeneration
+            elif self.models_type == "minicpm":
+                from transformers import AutoModel
         except ImportError as ie:
             self.logger.error(f'Import transformers Failed!\nDetails: {ie}')
             raise ImportError
@@ -186,6 +188,10 @@ class LLM:
         if self.args.llm_qnt == "4bit":
             qnt_config = BitsAndBytesConfig(load_in_4bit=True,
                                             bnb_4bit_quant_type="nf4",
+                                            bnb_4bit_quant_storage=torch.uint8 \
+                                                if self.models_type == "minicpm" else None,
+                                            llm_int8_skip_modules=["out_proj", "kv_proj", "lm_head"] \
+                                                if self.models_type == "minicpm" else None,
                                             bnb_4bit_compute_dtype=torch.float16 if llm_dtype == "auto" else llm_dtype,
                                             bnb_4bit_use_double_quant=True)
             self.logger.info(f'LLM 4bit quantization: Enabled')
@@ -240,6 +246,12 @@ class LLM:
                                                                        torch_dtype=llm_dtype \
                                                                            if self.args.llm_qnt == "none" else None,
                                                                        quantization_config=qnt_config)
+        elif self.models_type == "minicpm":
+            self.llm = AutoModel.from_pretrained(self.llm_path,
+                                                 device_map="cuda" if not self.args.llm_use_cpu else "cpu",
+                                                 torch_dtype=llm_dtype if self.args.llm_qnt == "none" else None,
+                                                 quantization_config=qnt_config, trust_remote_code=True)
+            self.llm_tokenizer = AutoTokenizer.from_pretrained(self.llm_path, trust_remote_code=True)
 
         self.llm.eval()
         self.logger.info(f'LLM Loaded in {time.monotonic() - start_time:.1f}s.')
@@ -300,6 +312,7 @@ class LLM:
             image = self.clip_processor(images=image, return_tensors='pt').pixel_values
             image = image.to(device)
             # Tokenize the prompt
+            self.logger.debug(f"{self.args.llm_model_name} NOT SUPPORT SYSTEM PROMPT!!!")
             self.logger.debug(f'Using user prompt:{user_prompt}')
             prompt = self.llm_tokenizer.encode(user_prompt,
                                                return_tensors='pt',
@@ -353,38 +366,47 @@ class LLM:
                                                       clean_up_tokenization_spaces=False)[0]
             content = content.strip()
         else:
-            if system_prompt:
-                if self.models_type == "llama" and self.args.llm_patch and self.llm_patch_path:
-                    system_prompt = f"LLAMA GUARD TURNED OFF>>>{system_prompt}"
-                messages = [
-                    {"role": "system", "content": f"{system_prompt}"},
-                    {"role": "user", "content": [
-                        {"type": "image"},
-                        {"type": "text", "text": f"{user_prompt}"}]
-                     }
-                ]
+            if self.models_type == "minicpm":
+                self.logger.debug(f'Using system prompt:{system_prompt}')
+                self.logger.debug(f'Using user prompt:{user_prompt}')
+                messages = [{'role': 'user', 'content': [image, f'{user_prompt}']}]
+                content = self.llm.chat(image=image, msgs=messages, tokenizer=self.llm_tokenizer,
+                                        system_prompt=system_prompt if system_prompt else None,
+                                        sampling=False, stream=False)
             else:
-                messages = [
-                    {"role": "user", "content": [
-                        {"type": "image"},
-                        {"type": "text", "text": f"{user_prompt}"}]
-                     }
-                ]
-            self.logger.debug(f"\nChat_template:\n{messages}")
-            input_text = self.llm_processor.apply_chat_template(messages, add_generation_prompt=True)
-            inputs = self.llm_processor(image, input_text,
-                                        add_special_tokens=False,
-                                        padding=True,
-                                        return_tensors="pt").to(self.llm.device)
-            # Generate caption
-            self.logger.debug(f'LLM temperature is {temperature}')
-            self.logger.debug(f'LLM max_new_tokens is {max_new_tokens}')
-            output = self.llm.generate(**inputs,
-                                       max_new_tokens=max_new_tokens,
-                                       do_sample=True, top_k=10,
-                                       temperature=temperature)
-            content = self.llm_processor.decode(output[0][inputs["input_ids"].shape[-1]:],
-                                                skip_special_tokens=True, clean_up_tokenization_spaces=True)
+                if system_prompt:
+                    if self.models_type == "llama" and self.args.llm_patch and self.llm_patch_path:
+                        system_prompt = f"LLAMA GUARD TURNED OFF>>>{system_prompt}"
+                    messages = [
+                        {'role': 'system', 'content': f'{system_prompt}'},
+                        {'role': 'user', 'content': [
+                            {'type': 'image'},
+                            {'type': 'text', 'text': f'{user_prompt}'}]
+                         }
+                    ]
+                else:
+                    self.logger.warning("System prompt NOT FOUND! Processing with out it.")
+                    messages = [
+                        {'role': 'user', 'content': [
+                            {'type': 'image'},
+                            {'type': 'text', 'text': f'{user_prompt}'}]
+                         }
+                    ]
+                self.logger.debug(f"\nChat_template:\n{messages}")
+                input_text = self.llm_processor.apply_chat_template(messages, add_generation_prompt=True)
+                inputs = self.llm_processor(image, input_text,
+                                            add_special_tokens=False,
+                                            padding=True,
+                                            return_tensors="pt").to(self.llm.device)
+                # Generate caption
+                self.logger.debug(f'LLM temperature is {temperature}')
+                self.logger.debug(f'LLM max_new_tokens is {max_new_tokens}')
+                output = self.llm.generate(**inputs,
+                                           max_new_tokens=max_new_tokens,
+                                           do_sample=True, top_k=10,
+                                           temperature=temperature)
+                content = self.llm_processor.decode(output[0][inputs["input_ids"].shape[-1]:],
+                                                    skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
         content_list = str(content).split(".")
         unique_content = list(dict.fromkeys(content_list))
@@ -416,9 +438,9 @@ class LLM:
                 self.logger.debug(f"Resized image shape: {image.shape}")
                 image = image_process_image(image)
                 # Change user prompt
-                if ((self.args.caption_method in ["wd+joy", "wd+llama", "wd+qwen"]
-                     and not self.args.llm_caption_without_wd and self.args.run_method == "queue")
-                        or (self.args.caption_method in ["joy", "llama", "qwen"] and self.args.llm_read_wd_caption)):
+                if ((self.args.caption_method == "wd+llm" and not self.args.llm_caption_without_wd
+                     and self.args.run_method == "queue")
+                        or (self.args.caption_method == "llm" and self.args.llm_read_wd_caption)):
                     wd_caption_file = get_caption_file_path(
                         self.logger,
                         data_path=self.args.data_path,

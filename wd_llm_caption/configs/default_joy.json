@@ -41,12 +41,31 @@
           "model-00003-of-00004.safetensors": "https://huggingface.co/meta-llama/Meta-Llama-3.1-8B/resolve/main/model-00003-of-00004.safetensors",
           "model-00004-of-00004.safetensors": "https://huggingface.co/meta-llama/Meta-Llama-3.1-8B/resolve/main/model-00004-of-00004.safetensors"
         }
+      },
+      "patch": {
+        "repo_id": "Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2",
+        "revision": "main",
+        "repo_type": "model",
+        "subfolder": "",
+        "file_list": {
+          "config.json": "https://huggingface.co/Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/main/config.json",
+          "generation_config.json": "https://huggingface.co/Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/main/generation_config.json",
+          "tokenizer.json": "https://huggingface.co/Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/main/tokenizer.json",
+          "tokenizer_config.json": "https://huggingface.co/Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/main/tokenizer_config.json",
+          "special_tokens_map.json": "https://huggingface.co/Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/main/special_tokens_map.json",
+          "model.safetensors.index.json": "https://huggingface.co/Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/main/model.safetensors.index.json",
+          "model-00001-of-00004.safetensors": "https://huggingface.co/Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/main/model-00001-of-00004.safetensors",
+          "model-00002-of-00004.safetensors": "https://huggingface.co/Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/main/model-00002-of-00004.safetensors",
+          "model-00003-of-00004.safetensors": "https://huggingface.co/Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/main/model-00003-of-00004.safetensors",
+          "model-00004-of-00004.safetensors": "https://huggingface.co/Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/main/model-00004-of-00004.safetensors"
+        }
       }
     },
     "modelscope": {
       "image_adapter": {
         "repo_id": "fireicewolf/joy-caption-pre-alpha",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "wpkklhc6",
         "file_list": {
           "image_adapter.pt": "https://www.modelscope.cn/models/fireicewolf/joy-caption-pre-alpha/resolve/master/wpkklhc6/image_adapter.pt"
@@ -55,6 +74,7 @@
       "clip": {
         "repo_id": "fireicewolf/siglip-so400m-patch14-384",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "config.json": "https://www.modelscope.cn/models/fireicewolf/siglip-so400m-patch14-384/resolve/master/config.json",
@@ -68,6 +88,7 @@
       "llm": {
         "repo_id": "fireicewolf/Meta-Llama-3.1-8B",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "config.json": "https://www.modelscope.cn/models/fireicewolf/Meta-Llama-3.1-8B/resolve/master/config.json",
@@ -80,6 +101,24 @@
           "model-00002-of-00004.safetensors": "https://www.modelscope.cn/models/fireicewolf/Meta-Llama-3.1-8B/resolve/master/model-00002-of-00004.safetensors",
           "model-00003-of-00004.safetensors": "https://www.modelscope.cn/models/fireicewolf/Meta-Llama-3.1-8B/resolve/master/model-00003-of-00004.safetensors",
           "model-00004-of-00004.safetensors": "https://www.modelscope.cn/models/fireicewolf/Meta-Llama-3.1-8B/resolve/master/model-00004-of-00004.safetensors"
+        }
+      },
+      "patch": {
+        "repo_id": "fireicewolf/Llama-3.1-8B-Lexi-Uncensored-V2",
+        "revision": "master",
+        "repo_type": "model",
+        "subfolder": "",
+        "file_list": {
+          "config.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/master/config.json",
+          "generation_config.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/master/generation_config.json",
+          "tokenizer.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/master/tokenizer.json",
+          "tokenizer_config.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/master/tokenizer_config.json",
+          "special_tokens_map.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/master/special_tokens_map.json",
+          "model.safetensors.index.json": "https://www.modelscope.cn/models/fireicewolf/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/master/model.safetensors.index.json",
+          "model-00001-of-00004.safetensors": "https://www.modelscope.cn/models/fireicewolf/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/master/model-00001-of-00004.safetensors",
+          "model-00002-of-00004.safetensors": "https://www.modelscope.cn/models/fireicewolf/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/master/model-00002-of-00004.safetensors",
+          "model-00003-of-00004.safetensors": "https://www.modelscope.cn/models/fireicewolf/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/master/model-00003-of-00004.safetensors",
+          "model-00004-of-00004.safetensors": "https://www.modelscope.cn/models/fireicewolf/Llama-3.1-8B-Lexi-Uncensored-V2/resolve/master/model-00004-of-00004.safetensors"
         }
       }
     }

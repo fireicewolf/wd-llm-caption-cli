@@ -16,6 +16,7 @@
       "models": {
         "repo_id": "fireicewolf/wd-eva02-large-tagger-v3",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "model.onnx": "https://www.modelscope.cn/models/fireicewolf/wd-eva02-large-tagger-v3/resolve/master/model.onnx",
@@ -41,6 +42,7 @@
       "models": {
         "repo_id": "fireicewolf/wd-vit-large-tagger-v3",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "model.onnx": "https://www.modelscope.cn/models/fireicewolf/wd-vit-large-tagger-v3/resolve/master/model.onnx",
@@ -66,6 +68,7 @@
       "models": {
         "repo_id": "fireicewolf/wd-swinv2-tagger-v3",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "model.onnx": "https://www.modelscope.cn/models/fireicewolf/wd-swinv2-tagger-v3/resolve/master/model.onnx",
@@ -91,6 +94,7 @@
       "models": {
         "repo_id": "fireicewolf/wd-vit-tagger-v3",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "model.onnx": "https://www.modelscope.cn/models/fireicewolf/wd-vit-tagger-v3/resolve/master/model.onnx",
@@ -116,6 +120,7 @@
       "models": {
         "repo_id": "fireicewolf/wd-convnext-tagger-v3",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "model.onnx": "https://www.modelscope.cn/models/fireicewolf/wd-convnext-tagger-v3/resolve/master/model.onnx",
@@ -266,6 +271,7 @@
       "models": {
         "repo_id": "fireicewolf/wd-v1-4-swinv2-tagger-v2",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "model.onnx": "https://www.modelscope.cn/models/fireicewolf/wd-v1-4-swinv2-tagger-v2/resolve/master/model.onnx",
@@ -291,6 +297,7 @@
       "models": {
         "repo_id": "fireicewolf/wd-v1-4-convnextv2-tagger-v2",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "model.onnx": "https://www.modelscope.cn/models/fireicewolf/wd-v1-4-convnextv2-tagger-v2/resolve/master/model.onnx",
@@ -316,6 +323,7 @@
       "models": {
         "repo_id": "fireicewolf/wd-v1-4-vit-tagger-v2",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "model.onnx": "https://www.modelscope.cn/models/fireicewolf/wd-v1-4-vit-tagger-v2/resolve/master/model.onnx",
@@ -341,6 +349,7 @@
       "models": {
         "repo_id": "fireicewolf/wd-v1-4-convnext-tagger-v2",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "model.onnx": "https://www.modelscope.cn/models/fireicewolf/wd-v1-4-convnext-tagger-v2/resolve/master/model.onnx",
@@ -366,6 +375,7 @@
       "models": {
         "repo_id": "fireicewolf/wd-v1-4-vit-tagger",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "model.onnx": "https://www.modelscope.cn/models/fireicewolf/wd-v1-4-vit-tagger/resolve/master/model.onnx",
@@ -391,6 +401,7 @@
       "models": {
         "repo_id": "fireicewolf/wd-v1-4-vit-tagger",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "model.onnx": "https://www.modelscope.cn/models/fireicewolf/wd-v1-4-convnext-tagger/resolve/master/model.onnx",
@@ -416,6 +427,7 @@
       "models": {
         "repo_id": "fireicewolf/Z3D-E621-Convnext",
         "revision": "master",
+        "repo_type": "model",
         "subfolder": "",
         "file_list": {
           "model.onnx": "https://www.modelscope.cn/models/fireicewolf/Z3D-E621-Convnext/resolve/master/model.onnx",

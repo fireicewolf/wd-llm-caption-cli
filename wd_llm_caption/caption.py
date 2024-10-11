@@ -9,25 +9,21 @@ from tqdm import tqdm
 
 from .utils.download import download_models
 from .utils.image import get_image_paths, image_process, image_process_image, image_process_gbr
-from .utils.inference import DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_PROMPT_WITHOUT_WD, \
-    DEFAULT_USER_PROMPT_WITH_WD
+from .utils.inference import DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_PROMPT_WITHOUT_WD, DEFAULT_USER_PROMPT_WITH_WD
 from .utils.inference import get_caption_file_path, LLM, Tagger
-from .utils.logger import Logger
+from .utils.logger import Logger, print_title
 
 DEFAULT_MODELS_SAVE_PATH = str(os.path.join(os.getcwd(), "models"))
 
 
 class Caption:
-    def __init__(
-            self,
-            args: argparse.Namespace
-    ):
+    def __init__(self):
         # Set flags
-
-        self.use_wd = True if args.caption_method in ["wd+joy", "wd+llama", "wd+qwen", "wd"] else False
-        self.use_joy = True if args.caption_method in ["wd+joy", "joy"] else False
-        self.use_llama = True if args.caption_method in ["wd+llama", "llama"] else False
-        self.use_qwen = True if args.caption_method in ["wd+qwen", "qwen"] else False
+        self.use_wd = False
+        self.use_joy = False
+        self.use_llama = False
+        self.use_qwen = False
+        self.use_minicpm = False
 
         self.my_logger = None
 
@@ -94,6 +90,12 @@ class Caption:
             self,
             args: argparse.Namespace,
     ):
+        # Set flags
+        self.use_wd = True if args.caption_method in ["wd", "wd+llm"] else False
+        self.use_joy = True if args.caption_method in ["llm", "wd+llm"] and args.llm_choice == "joy" else False
+        self.use_llama = True if args.caption_method in ["llm", "wd+llm"] and args.llm_choice == "llama" else False
+        self.use_qwen = True if args.caption_method in ["llm", "wd+llm"] and args.llm_choice == "qwen" else False
+        self.use_minicpm = True if args.caption_method in ["llm", "wd+llm"] and args.llm_choice == "minicpm" else False
         # Set models save path
         if os.path.exists(Path(args.models_save_path)):
             models_save_path = Path(args.models_save_path)
@@ -108,7 +110,6 @@ class Caption:
                 wd_config_file = os.path.join(Path(__file__).parent, 'configs', 'default_wd.json')
             else:
                 wd_config_file = Path(args.wd_config)
-
             # Download wd models
             self.wd_model_path, self.wd_tags_csv_path = download_models(
                 logger=self.my_logger,
@@ -124,7 +125,6 @@ class Caption:
                 llm_config_file = os.path.join(Path(__file__).parent, 'configs', 'default_joy.json')
             else:
                 llm_config_file = Path(args.llm_config)
-
             # Download joy models
             self.llm_models_paths = download_models(
                 logger=self.my_logger,
@@ -140,34 +140,36 @@ class Caption:
                 llm_config_file = os.path.join(Path(__file__).parent, 'configs', 'default_llama_3.2V.json')
             else:
                 llm_config_file = Path(args.llm_config)
-
             # Download Llama models
-            if args.llm_patch:
-                self.llm_models_paths = download_models(
-                    logger=self.my_logger,
-                    models_type="llama",
-                    args=args,
-                    config_file=llm_config_file,
-                    models_save_path=models_save_path,
-                )
-            else:
-                self.llm_models_paths = download_models(
-                    logger=self.my_logger,
-                    models_type="llama",
-                    args=args,
-                    config_file=llm_config_file,
-                    models_save_path=models_save_path,
-                )
+            self.llm_models_paths = download_models(
+                logger=self.my_logger,
+                models_type="llama",
+                args=args,
+                config_file=llm_config_file,
+                models_save_path=models_save_path,
+            )
         elif self.use_qwen:
             if not args.llm_config:
                 llm_config_file = os.path.join(Path(__file__).parent, 'configs', 'default_qwen2_vl.json')
             else:
                 llm_config_file = Path(args.llm_config)
-
             # Download Qwen models
             self.llm_models_paths = download_models(
                 logger=self.my_logger,
                 models_type="qwen",
+                args=args,
+                config_file=llm_config_file,
+                models_save_path=models_save_path,
+            )
+        elif self.use_minicpm:
+            if not args.llm_config:
+                llm_config_file = os.path.join(Path(__file__).parent, 'configs', 'default_minicpm.json')
+            else:
+                llm_config_file = Path(args.llm_config)
+            # Download Qwen models
+            self.llm_models_paths = download_models(
+                logger=self.my_logger,
+                models_type="minicpm",
                 args=args,
                 config_file=llm_config_file,
                 models_save_path=models_save_path,
@@ -214,6 +216,15 @@ class Caption:
                 args=args,
             )
             self.my_llm.load_model()
+        elif self.use_minicpm:
+            # Load Qwen models
+            self.my_llm = LLM(
+                logger=self.my_logger,
+                models_type="minicpm",
+                models_paths=self.llm_models_paths,
+                args=args,
+            )
+            self.my_llm.load_model()
 
     def run_inference(
             self,
@@ -221,7 +232,7 @@ class Caption:
     ):
         start_inference_time = time.monotonic()
         # Inference
-        if self.use_wd and (self.use_joy or self.use_llama or self.use_qwen):
+        if self.use_wd and args.caption_method == "wd+llm":
             # Set joy user prompt
             if args.llm_user_prompt == DEFAULT_USER_PROMPT_WITHOUT_WD:
                 if not args.llm_caption_without_wd:
@@ -229,6 +240,7 @@ class Caption:
                     args.llm_user_prompt = DEFAULT_USER_PROMPT_WITH_WD
             # run
             if args.run_method == "sync":
+                self.my_logger.info(f"Running in sync mode...")
                 image_paths = get_image_paths(logger=self.my_logger, path=Path(args.data_path),
                                               recursive=args.recursive)
                 pbar = tqdm(total=len(image_paths), smoothing=0.0)
@@ -319,7 +331,6 @@ class Caption:
                         continue
 
                     pbar.update(1)
-
                 pbar.close()
 
                 if args.wd_tags_frequency:
@@ -328,16 +339,19 @@ class Caption:
                     for tag, freq in sorted_tags:
                         self.my_logger.info(f'{tag}: {freq}')
             else:
+                self.my_logger.info(f"Running in queue mode...")
                 pbar = tqdm(total=2, smoothing=0.0)
                 pbar.set_description('Processing with WD model...')
                 self.my_tagger.inference()
                 pbar.update(1)
                 if self.use_joy:
-                    pbar.set_description('Processing with joy model...')
+                    pbar.set_description('Processing with Joy model...')
                 elif self.use_llama:
                     pbar.set_description('Processing with Llama model...')
                 elif self.use_qwen:
                     pbar.set_description('Processing with Qwen model...')
+                elif self.use_minicpm:
+                    pbar.set_description('Processing with Mini-CPM model...')
                 self.my_llm.inference()
                 pbar.update(1)
 
@@ -441,17 +455,17 @@ def setup_args() -> argparse.Namespace:
     caption_args.add_argument(
         '--caption_method',
         type=str,
-        default='wd+llama',
-        choices=['wd+llama', 'wd+joy', 'wd+qwen', 'wd', 'joy', 'llama', 'qwen'],
-        help='method for caption[`wd+llama`, `wd+joy`, `wd+qwen`, `wd`, `joy`, `llama`, `qwen`], select wd or llm models, or both of them to caption, '
-             'default is `wd+llama`.',
+        default='wd+llm',
+        choices=['wd', 'llm', 'wd+llm'],
+        help='method for caption [`wd`, `llm`, `wd+llm`], select wd or llm, or both of them to caption, '
+             'default is `wd+llm`.',
     )
     caption_args.add_argument(
         '--run_method',
         type=str,
         default='sync',
         choices=['sync', 'queue'],
-        help='''running method for wd+llm caption[`sync`, `queue`], need `caption_method` set to `wd+llama` or `wd+joy`.
+        help='''running method for wd+llm caption[`sync`, `queue`], need `caption_method` set to `wd+llm`.
              if sync, image will caption with wd models,
              then caption with joy models while wd captions in joy user prompt.
              if queue, all images will caption with wd models first,
@@ -585,6 +599,13 @@ def setup_args() -> argparse.Namespace:
 
     llm_args = args.add_argument_group("LLM Caption")
     llm_args.add_argument(
+        '--llm_choice',
+        type=str,
+        default='llama',
+        choices=['joy', 'llama', 'qwen', 'minicpm'],
+        help='select llm models[`joy`, `llama`, `qwen`, `minicpm`], default is `llama`.',
+    )
+    llm_args.add_argument(
         '--llm_config',
         type=str,
         help='config json for LLM Caption models, default is `default_llama_3.2V.json`'
@@ -627,12 +648,12 @@ def setup_args() -> argparse.Namespace:
     llm_args.add_argument(
         '--llm_read_wd_caption',
         action='store_true',
-        help='LLM will read wd tags for inference.\nOnly effect when `caption_method` only used joy, llama or qwen models'
+        help='LLM will read wd tags for inference.\nOnly effect when `caption_method` is `llm`'
     )
     llm_args.add_argument(
         '--llm_caption_without_wd',
         action='store_true',
-        help='LLM will not read WD tags for inference.\nOnly effect when `caption_method` used wd and llm both.'
+        help='LLM will not read WD tags for inference.\nOnly effect when `caption_method` is `wd+llm`.'
     )
     llm_args.add_argument(
         '--llm_system_prompt',
@@ -659,18 +680,20 @@ def setup_args() -> argparse.Namespace:
         help='max tokens for LLM model output, default is `300`.'
     )
 
-    gradio_args = args.add_argument_group("Gradio dummy args")
+    gradio_args = args.add_argument_group("Gradio dummy args, no effects")
+    gradio_args.add_argument('--theme', type=str, default="default", choices=["default", "ocean", "origin"],
+                             help="set themes")
     gradio_args.add_argument('--port', type=int, default="8282", help="port, default is `8282`")
     gradio_args.add_argument('--listen', action='store_true', help="allow remote connections")
     gradio_args.add_argument('--share', action='store_true', help="allow gradio share")
     gradio_args.add_argument('--inbrowser', action='store_true', help="auto open in browser")
-
     return args.parse_args()
 
 
 def main():
+    print_title()
     get_args = setup_args()
-    my_caption = Caption(args=get_args)
+    my_caption = Caption()
     my_caption.check_path(get_args)
     my_caption.set_logger(get_args)
     my_caption.download_models(get_args)

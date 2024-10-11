@@ -86,10 +86,10 @@ def download_models(
         with open(config_file, 'r', encoding='utf-8') as config_json:
             datas = json.load(config_json)
             if models_type == "wd":
-                model_name = list(datas.keys())[0] if args.wd_model_name is None else args.wd_model_name
+                model_name = list(datas.keys())[0] if not args.wd_model_name else args.wd_model_name
                 args.wd_model_name = model_name
-            elif models_type in ["joy", "llama", "qwen"]:
-                model_name = list(datas.keys())[0] if args.llm_model_name is None else args.llm_model_name
+            elif models_type in ["joy", "llama", "qwen", "minicpm"]:
+                model_name = list(datas.keys())[0] if not args.llm_model_name else args.llm_model_name
                 args.llm_model_name = model_name
             else:
                 logger.error("Invalid model type!")
@@ -156,6 +156,9 @@ def download_models(
             sub_model_info = model_site_info[sub_model_name]
             if sub_model_name == "patch" and not args.llm_patch:
                 logger.warning(f"Found LLM patch, but llm_patch not enabled, won't download it.")
+                continue
+            if models_type == "joy" and sub_model_name == "llm" and args.llm_patch:
+                logger.warning(f"LLM patch Enabled, replace LLM to patched version.")
                 continue
             sub_model_path = ""
 
@@ -238,5 +241,5 @@ def download_models(
             return llm_path, llm_patch_path
         else:
             return llm_path,
-    elif models_type == "qwen":
+    elif models_type in ["qwen", "minicpm"]:
         return Path(os.path.dirname(models_path[0])),
