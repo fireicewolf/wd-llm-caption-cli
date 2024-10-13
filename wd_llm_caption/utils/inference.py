@@ -298,8 +298,8 @@ class LLM:
             image: Image.Image,
             system_prompt: str,
             user_prompt: str,
-            temperature: float = 0.5,
-            max_new_tokens: int = 300,
+            temperature: float = 0,
+            max_new_tokens: int = 0,
     ) -> str:
         # Import torch
         try:
@@ -355,8 +355,16 @@ class LLM:
             ], dim=1).to(device)
             attention_mask = torch.ones_like(input_ids)
             # Generate caption
-            self.logger.debug(f'LLM temperature is {temperature}')
-            self.logger.debug(f'LLM max_new_tokens is {max_new_tokens}')
+            if temperature == 0:
+                temperature = 0.5
+                self.logger.warning(f'LLM temperature not set, using default value {temperature}')
+            else:
+                self.logger.debug(f'LLM temperature is {temperature}')
+            if max_new_tokens == 0:
+                max_new_tokens = 300
+                self.logger.warning(f'LLM max_new_tokens not set, using default value {max_new_tokens}')
+            else:
+                self.logger.debug(f'LLM max_new_tokens is {max_new_tokens}')
             generate_ids = self.llm.generate(input_ids,
                                              inputs_embeds=inputs_embeds,
                                              attention_mask=attention_mask,
@@ -378,9 +386,37 @@ class LLM:
                 self.logger.debug(f'Using system prompt:{system_prompt}')
                 self.logger.debug(f'Using user prompt:{user_prompt}')
                 messages = [{'role': 'user', 'content': [image, f'{user_prompt}']}]
+                if temperature == 0 and max_new_tokens == 0:
+                    max_new_tokens = 2048
+                    self.logger.warning(f'LLM temperature and max_new_tokens not set, only '
+                                        f'using default max_new_tokens value {max_new_tokens}')
+                    params = {
+                        'num_beams': 3,
+                        'repetition_penalty': 1.2,
+                        "max_new_tokens": max_new_tokens
+                    }
+                else:
+                    if temperature == 0:
+                        temperature = 0.7
+                        self.logger.warning(f'LLM temperature not set, using default value {temperature}')
+                    else:
+                        self.logger.debug(f'LLM temperature is {temperature}')
+                    if max_new_tokens == 0:
+                        max_new_tokens = 2048
+                        self.logger.warning(f'LLM max_new_tokens not set, using default value {max_new_tokens}')
+                    else:
+                        self.logger.debug(f'LLM max_new_tokens is {max_new_tokens}')
+                    params = {
+                        'top_p': 0.8,
+                        'top_k': 100,
+                        'temperature': temperature,
+                        'repetition_penalty': 1.05,
+                        "max_new_tokens": max_new_tokens
+                    }
+                params["max_inp_length"] = 4352
                 content = self.llm.chat(image=image, msgs=messages, tokenizer=self.llm_tokenizer,
                                         system_prompt=system_prompt if system_prompt else None,
-                                        sampling=False, stream=False)
+                                        sampling=False, stream=False, **params)
             elif self.models_type == "florence":
                 self.logger.warning(f"Florence models don't support system prompt or user prompt!")
                 self.logger.warning(f"Florence models don't support temperature or max tokens!")
@@ -433,10 +469,29 @@ class LLM:
                 # Generate caption
                 self.logger.debug(f'LLM temperature is {temperature}')
                 self.logger.debug(f'LLM max_new_tokens is {max_new_tokens}')
-                output = self.llm.generate(**inputs,
-                                           max_new_tokens=max_new_tokens,
-                                           do_sample=True, top_k=10,
-                                           temperature=temperature)
+                if temperature == 0 and max_new_tokens == 0:
+                    max_new_tokens = 300
+                    self.logger.warning(f'LLM temperature and max_new_tokens not set, only '
+                                        f'using default max_new_tokens value {max_new_tokens}')
+                    params = {}
+                else:
+                    if temperature == 0:
+                        temperature = 0.5
+                        self.logger.warning(f'LLM temperature not set, using default value {temperature}')
+                    else:
+                        self.logger.debug(f'LLM temperature is {temperature}')
+                    if max_new_tokens == 0:
+                        max_new_tokens = 300
+                        self.logger.warning(f'LLM max_new_tokens not set, using default value {max_new_tokens}')
+                    else:
+                        self.logger.debug(f'LLM max_new_tokens is {max_new_tokens}')
+                    params = {
+                        'do_sample': True,
+                        'top_k': 10,
+                        'temperature': temperature,
+                    }
+
+                output = self.llm.generate(**inputs, max_new_tokens=max_new_tokens, **params)
                 content = self.llm_processor.decode(output[0][inputs["input_ids"].shape[-1]:],
                                                     skip_special_tokens=True, clean_up_tokenization_spaces=True)
 

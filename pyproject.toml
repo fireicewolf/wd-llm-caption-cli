@@ -50,13 +50,13 @@ dynamic = ["version"]
 authors = [
     { name = "DukeG", email = "fireicewolf@gmail.com" },
 ]
-description = "A Python base cli tool for caption images with WD series, Joy-caption-pre-alpha, meta Llama 3.2 Vision Instruct, Qwen2 VL Instruct and Mini-CPM V2.6 models."
+description = "A Python base cli tool for caption images with WD series, Joy-caption-pre-alpha, meta Llama 3.2 Vision Instruct, Qwen2 VL Instruct, Mini-CPM V2.6 and Florence-2 models."
 readme = "README.md"
-keywords = ["image-caption", "WD", "Llama 3.2 Vision Instruct", "Qwen2 VL Instruct", "Mini-CPM V2.6", "Joy Caption Alpha"]
+keywords = ["Image Caption", "WD", "Llama 3.2 Vision Instruct", "Joy Caption Alpha", "Qwen2 VL Instruct", "Mini-CPM V2.6", "Florence-2"]
 license = { file = 'LICENSE' }
 requires-python = ">=3.10"
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",

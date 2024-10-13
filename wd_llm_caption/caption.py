@@ -377,6 +377,8 @@ class Caption:
                     pbar.set_description('Processing with Qwen model...')
                 elif self.use_minicpm:
                     pbar.set_description('Processing with Mini-CPM model...')
+                elif self.use_florence:
+                    pbar.set_description('Processing with Florence model...')
                 self.my_llm.inference()
                 pbar.update(1)
 
@@ -384,7 +386,7 @@ class Caption:
         else:
             if self.use_wd:
                 self.my_tagger.inference()
-            elif self.use_joy or self.use_llama or self.use_qwen:
+            elif self.use_joy or self.use_llama or self.use_qwen or self.use_minicpm or self.use_florence:
                 self.my_llm.inference()
 
         total_inference_time = time.monotonic() - start_inference_time
@@ -695,14 +697,14 @@ def setup_args() -> argparse.Namespace:
     llm_args.add_argument(
         '--llm_temperature',
         type=float,
-        default=0.5,
-        help='temperature for LLM model, default is `0.5`.'
+        default=0,
+        help='temperature for LLM model, default is `0`，means use llm own default value.'
     )
     llm_args.add_argument(
         '--llm_max_tokens',
         type=int,
-        default=300,
-        help='max tokens for LLM model output, default is `300`.'
+        default=0,
+        help='max tokens for LLM model output, default is `0`, means use llm own default value.'
     )
 
     gradio_args = args.add_argument_group("Gradio dummy args, no effects")

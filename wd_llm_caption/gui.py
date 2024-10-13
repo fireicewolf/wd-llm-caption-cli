@@ -41,6 +41,8 @@ def gui_setup_args():
     parser.add_argument('--inbrowser', action='store_true', help="auto open in browser")
     parser.add_argument('--log_level', type=str, choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                         default='INFO', help="set log level, default is `INFO`")
+    parser.add_argument('--models_save_path', type=str, default=caption.DEFAULT_MODELS_SAVE_PATH,
+                        help='path to save models, default is `models`.')
 
     return parser.parse_args()
 
@@ -165,9 +167,9 @@ def gui():
                                                      value=caption.DEFAULT_USER_PROMPT_WITH_WD)
 
                         llm_temperature = gr.Slider(label="temperature for LLM model",
-                                                    minimum=0.1, maximum=1.0, value=0.5, step=0.1)
+                                                    minimum=0, maximum=1.0, value=0, step=0.1)
                         llm_max_tokens = gr.Slider(label="max token for LLM model",
-                                                   minimum=1, maximum=1024, value=300, step=1)
+                                                   minimum=0, maximum=2048, value=0, step=1)
 
                         with gr.Group():
                             gr.Markdown("<center>Common Settings</center>")
@@ -422,6 +424,7 @@ def gui():
                     os.environ["HF_TOKEN"] = str(huggingface_token_value)
 
                 get_gradio_args = gui_setup_args()
+                args.models_save_path = str(get_gradio_args.models_save_path)
                 args.log_level = str(get_gradio_args.log_level)
                 args.caption_method = str(caption_method_value).lower()
                 args.llm_choice = str(llm_choice_value).lower()
@@ -450,7 +453,6 @@ def gui():
                     CAPTION_FN.set_logger(args)
 
                 caption_init = CAPTION_FN
-
                 args.wd_force_use_cpu = bool(wd_force_use_cpu_value)
 
                 args.llm_use_cpu = bool(llm_use_cpu_value)
