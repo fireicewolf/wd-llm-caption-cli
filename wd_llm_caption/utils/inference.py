@@ -89,7 +89,7 @@ class LLM:
             args: Namespace,
     ):
         self.logger = logger
-        if models_type in ["llama", "joy", "qwen", "minicpm"]:
+        if models_type in ["llama", "joy", "qwen", "minicpm", "florence"]:
             self.models_type = models_type
         else:
             self.logger.error(f"Invalid model type: {models_type}!!!")
@@ -122,7 +122,7 @@ class LLM:
 
             self.llm_processor = None
 
-        elif self.models_type in ["qwen", "minicpm"]:
+        elif self.models_type in ["qwen", "minicpm", "florence"]:
             if len(models_paths) != 1:
                 self.logger.error(self.logger.error(f"Invalid models paths: {models_paths}!!!"))
                 raise ValueError
@@ -145,7 +145,7 @@ class LLM:
         # Import transformers
         try:
             from transformers import AutoProcessor, AutoTokenizer, BitsAndBytesConfig
-            if self.models_type == "joy":
+            if self.models_type in ["joy", "florence"]:
                 from transformers import AutoModel, AutoModelForCausalLM, PreTrainedTokenizer, PreTrainedTokenizerFast
             elif self.models_type == "llama":
                 from transformers import MllamaForConditionalGeneration
@@ -185,6 +185,9 @@ class LLM:
             if self.args.llm_dtype == "fp16" else torch.bfloat16 if self.args.llm_dtype == "bf16" else "auto"
         self.logger.info(f'LLM dtype: {llm_dtype}')
         # LLM BNB quantization config
+        if self.args.llm_qnt != "none" and self.models_type == "florence":  # Florence don't support quantization!
+            self.logger.warning(f"{self.args.llm_model_name} don't support quantization!")
+            self.args.llm_qnt = "none"
         if self.args.llm_qnt == "4bit":
             qnt_config = BitsAndBytesConfig(load_in_4bit=True,
                                             bnb_4bit_quant_type="nf4",
@@ -202,14 +205,17 @@ class LLM:
         else:
             qnt_config = None
 
-        if self.models_type == "joy":
+        if self.models_type in ["joy", "florence"]:
             # Load `Llama 3.1` model
             self.llm = AutoModelForCausalLM.from_pretrained(self.llm_path,
-                                                            device_map="auto" \
+                                                            device_map="cuda" \
+                                                                if self.models_type == "florence" else "auto" \
                                                                 if not self.args.llm_use_cpu else "cpu",
                                                             torch_dtype=llm_dtype \
                                                                 if self.args.llm_qnt == "none" else None,
-                                                            quantization_config=qnt_config)
+                                                            quantization_config=qnt_config,
+                                                            trust_remote_code=True \
+                                                                if self.models_type == "florence" else False)
         elif self.models_type == "llama":
             # Patch `Llama 3.2 Vision Instruct` `chat_template.json`
             chat_template_json = os.path.join(self.llm_path, "chat_template.json")
@@ -255,11 +261,13 @@ class LLM:
 
         self.llm.eval()
         self.logger.info(f'LLM Loaded in {time.monotonic() - start_time:.1f}s.')
-        # Load processor for `Llama 3.2 Vision Instruct` & `Qwen 2 VL`
-        if self.models_type in ["llama", "qwen"]:
+        # Load processor for `Llama 3.2 Vision Instruct`, `Qwen 2 VL` & `Florence2`
+        if self.models_type in ["llama", "qwen", "florence"]:
             start_time = time.monotonic()
             self.logger.info(f'Loading processor with {"CPU" if self.args.llm_use_cpu else "GPU"}...')
-            self.llm_processor = AutoProcessor.from_pretrained(self.llm_path)
+            self.llm_processor = AutoProcessor.from_pretrained(self.llm_path,
+                                                               trust_remote_code=True \
+                                                                   if self.models_type == "florence" else False)
             self.logger.info(f'Processor Loaded in {time.monotonic() - start_time:.1f}s.')
 
         # Load Image Adapter for Joy
@@ -373,6 +381,30 @@ class LLM:
                 content = self.llm.chat(image=image, msgs=messages, tokenizer=self.llm_tokenizer,
                                         system_prompt=system_prompt if system_prompt else None,
                                         sampling=False, stream=False)
+            elif self.models_type == "florence":
+                self.logger.warning(f"Florence models don't support system prompt or user prompt!")
+                self.logger.warning(f"Florence models don't support temperature or max tokens!")
+
+                def run_inference(task_prompt, text_input=None):
+                    if text_input is None:
+                        input_prompt = task_prompt
+                    else:
+                        input_prompt = task_prompt + text_input
+                    get_inputs = (self.llm_processor(text=input_prompt, images=image, return_tensors="pt").
+                                  to(device=self.llm.device, dtype=self.llm.dtype))
+                    generated_ids = self.llm.generate(
+                        input_ids=get_inputs["input_ids"],
+                        pixel_values=get_inputs["pixel_values"],
+                        max_new_tokens=1024,
+                        num_beams=3
+                    )
+                    generated_text = self.llm_processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+                    parsed_answer = self.llm_processor.post_process_generation(generated_text, task=task_prompt,
+                                                                               image_size=(image.width, image.height))
+                    return parsed_answer[task_prompt]
+
+                content = run_inference("<MORE_DETAILED_CAPTION>")
+
             else:
                 if system_prompt:
                     if self.models_type == "llama" and self.args.llm_patch and self.llm_patch_path:

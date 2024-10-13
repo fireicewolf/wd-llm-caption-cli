@@ -24,6 +24,7 @@ class Caption:
         self.use_llama = False
         self.use_qwen = False
         self.use_minicpm = False
+        self.use_florence = False
 
         self.my_logger = None
 
@@ -96,6 +97,8 @@ class Caption:
         self.use_llama = True if args.caption_method in ["llm", "wd+llm"] and args.llm_choice == "llama" else False
         self.use_qwen = True if args.caption_method in ["llm", "wd+llm"] and args.llm_choice == "qwen" else False
         self.use_minicpm = True if args.caption_method in ["llm", "wd+llm"] and args.llm_choice == "minicpm" else False
+        self.use_florence = True if args.caption_method in ["llm", "wd+llm"] and \
+                                    args.llm_choice == "florence" else False
         # Set models save path
         if os.path.exists(Path(args.models_save_path)):
             models_save_path = Path(args.models_save_path)
@@ -174,6 +177,19 @@ class Caption:
                 config_file=llm_config_file,
                 models_save_path=models_save_path,
             )
+        elif self.use_florence:
+            if not args.llm_config:
+                llm_config_file = os.path.join(Path(__file__).parent, 'configs', 'default_florence.json')
+            else:
+                llm_config_file = Path(args.llm_config)
+            # Download Qwen models
+            self.llm_models_paths = download_models(
+                logger=self.my_logger,
+                models_type="florence",
+                args=args,
+                config_file=llm_config_file,
+                models_save_path=models_save_path,
+            )
 
     def load_models(
             self,
@@ -221,6 +237,15 @@ class Caption:
             self.my_llm = LLM(
                 logger=self.my_logger,
                 models_type="minicpm",
+                models_paths=self.llm_models_paths,
+                args=args,
+            )
+            self.my_llm.load_model()
+        elif self.use_florence:
+            # Load Florence models
+            self.my_llm = LLM(
+                logger=self.my_logger,
+                models_type="florence",
                 models_paths=self.llm_models_paths,
                 args=args,
             )
@@ -602,8 +627,8 @@ def setup_args() -> argparse.Namespace:
         '--llm_choice',
         type=str,
         default='llama',
-        choices=['joy', 'llama', 'qwen', 'minicpm'],
-        help='select llm models[`joy`, `llama`, `qwen`, `minicpm`], default is `llama`.',
+        choices=['joy', 'llama', 'qwen', 'minicpm', 'florence'],
+        help='select llm models[`joy`, `llama`, `qwen`, `minicpm`, `florence`], default is `llama`.',
     )
     llm_args.add_argument(
         '--llm_config',
@@ -618,7 +643,7 @@ def setup_args() -> argparse.Namespace:
     llm_args.add_argument(
         '--llm_patch',
         action='store_true',
-        help='patch llm with lora for uncensored, only support `Llama-3.2-11B-Vision-Instruct` now'
+        help='patch llm with lora for uncensored, only support `Llama-3.2-11B-Vision-Instruct` and `Joy-Caption-Pre-Alpha` now'
     )
     llm_args.add_argument(
         '--llm_use_cpu',

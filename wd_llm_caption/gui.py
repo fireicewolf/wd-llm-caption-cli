@@ -16,6 +16,7 @@ JOY_CONFIG = os.path.join(os.path.dirname(__file__), "configs", "default_joy.jso
 LLAMA_CONFIG = os.path.join(os.path.dirname(__file__), "configs", "default_llama_3.2V.json")
 QWEN_CONFIG = os.path.join(os.path.dirname(__file__), "configs", "default_qwen2_vl.json")
 MINICPM_CONFIG = os.path.join(os.path.dirname(__file__), "configs", "default_minicpm.json")
+FLORENCE_CONFIG = os.path.join(os.path.dirname(__file__), "configs", "default_florence.json")
 
 SKIP_DOWNLOAD = True
 
@@ -74,12 +75,13 @@ def gui():
                 #                             choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                 #                             value="INFO")
 
-                with gr.Row(equal_height=True):
+                with gr.Row(equal_height=True) as models_settings:
                     with gr.Column(min_width=240):
                         with gr.Column(min_width=240):
                             caption_method = gr.Radio(label="Caption method", choices=["WD+LLM", "WD", "LLM"],
                                                       value="WD+LLM")
-                            llm_choice = gr.Radio(label="Choice LLM", choices=["Llama", "Joy", "Qwen", "MiniCPM"],
+                            llm_choice = gr.Radio(label="Choice LLM",
+                                                  choices=["Llama", "Joy", "Qwen", "MiniCPM", "Florence"],
                                                   value="Llama")
 
                             def llm_choice_visibility(caption_method_radio):
@@ -98,6 +100,8 @@ def gui():
                                                       value=read_json(QWEN_CONFIG)[0], visible=False)
                             minicpm_models = gr.Dropdown(label="MiniCPM models", choices=read_json(MINICPM_CONFIG),
                                                          value=read_json(MINICPM_CONFIG)[0], visible=False)
+                            florence_models = gr.Dropdown(label="Florence models", choices=read_json(FLORENCE_CONFIG),
+                                                          value=read_json(FLORENCE_CONFIG)[0], visible=False)
 
                     with gr.Column(min_width=240):
                         with gr.Column(min_width=240):
@@ -235,17 +239,21 @@ def gui():
                 visible=True if "LLM" in caption_method_radio and llm_choice_radio == "Qwen" else False)
             minicpm_model_visible = gr.update(
                 visible=True if "LLM" in caption_method_radio and llm_choice_radio == "MiniCPM" else False)
+            florence_model_visible = gr.update(
+                visible=True if "LLM" in caption_method_radio and llm_choice_radio == "Florence" else False)
 
             return joy_model_visible, llama_model_visible, llama_use_patch_visible, \
-                qwen_model_visible, minicpm_model_visible
+                qwen_model_visible, minicpm_model_visible, florence_model_visible
 
         caption_method.change(fn=caption_method_update_visibility, inputs=caption_method,
                               outputs=[run_method, wd_models, wd_force_use_cpu, llm_use_cpu,
                                        wd_settings, llm_load_settings, llm_settings])
         caption_method.change(fn=llm_choice_update_visibility, inputs=[caption_method, llm_choice],
-                              outputs=[joy_models, llama_models, llm_use_patch, qwen_models, minicpm_models])
+                              outputs=[joy_models, llama_models, llm_use_patch,
+                                       qwen_models, minicpm_models, florence_models])
         llm_choice.change(fn=llm_choice_update_visibility, inputs=[caption_method, llm_choice],
-                          outputs=[joy_models, llama_models, llm_use_patch, qwen_models, minicpm_models])
+                          outputs=[joy_models, llama_models, llm_use_patch,
+                                   qwen_models, minicpm_models, florence_models])
 
         def llm_use_patch_visibility(llama_model_dropdown):
             return gr.update(
@@ -285,8 +293,12 @@ def gui():
         def use_minicpm(check_caption_method, check_llm_choice):
             return True if check_caption_method in ["llm", "wd+llm"] and check_llm_choice == "minicpm" else False
 
+        def use_florence(check_caption_method, check_llm_choice):
+            return True if check_caption_method in ["llm", "wd+llm"] and check_llm_choice == "florence" else False
+
         def load_models_interactive_group():
             return [
+                gr.update(interactive=False),
                 gr.update(interactive=False),
                 gr.update(interactive=False),
                 gr.update(interactive=False),
@@ -307,6 +319,7 @@ def gui():
 
         def unloads_models_interactive_group():
             return [
+                gr.update(interactive=True),
                 gr.update(interactive=True),
                 gr.update(interactive=True),
                 gr.update(interactive=True),
@@ -388,6 +401,7 @@ def gui():
                 llama_model_value,
                 qwen_model_value,
                 minicpm_model_value,
+                florence_model_value,
                 wd_force_use_cpu_value,
                 llm_use_cpu_value,
                 llm_use_patch_value,
@@ -427,6 +441,9 @@ def gui():
                 elif use_minicpm(args.caption_method, args.llm_choice):
                     args.llm_config = MINICPM_CONFIG
                     args.llm_model_name = str(minicpm_model_value)
+                elif use_florence(args.caption_method, args.llm_choice):
+                    args.llm_config = FLORENCE_CONFIG
+                    args.llm_model_name = str(florence_model_value)
 
                 if CAPTION_FN is None:
                     CAPTION_FN = caption.Caption()
@@ -534,7 +551,8 @@ def gui():
             if use_joy(args.caption_method, args.llm_choice) \
                     or use_llama(args.caption_method, args.llm_choice) \
                     or use_qwen(args.caption_method, args.llm_choice) \
-                    or use_minicpm(args.caption_method, args.llm_choice):
+                    or use_minicpm(args.caption_method, args.llm_choice) \
+                    or use_florence(args.caption_method, args.llm_choice):
                 get_caption_fn.my_logger.debug(f"Caption with LLM: {args.llm_model_name}.")
                 llm_image = image_process(image, args.image_size)
                 llm_image = image_process_image(llm_image)
@@ -546,7 +564,7 @@ def gui():
                     temperature=args.llm_temperature,
                     max_new_tokens=args.llm_max_tokens
                 )
-                get_caption_fn.my_logger.info(f"LLM Caption content: {caption}")
+                get_caption_fn.my_logger.info(f"LLM Caption content: {caption_text}")
             gr.Info(f"Inference end in {time.monotonic() - start_time:.1f}s.")
             if auto_unload_value:
                 caption_unload_models()
@@ -648,12 +666,14 @@ def gui():
         load_model_button.click(fn=caption_models_load,
                                 inputs=[model_site, huggingface_token,
                                         caption_method, llm_choice,
-                                        wd_models, joy_models, llama_models, qwen_models, minicpm_models,
+                                        wd_models, joy_models, llama_models,
+                                        qwen_models, minicpm_models, florence_models,
                                         wd_force_use_cpu,
                                         llm_use_cpu, llm_use_patch, llm_dtype, llm_qnt],
                                 outputs=[model_site, huggingface_token,
                                          caption_method, llm_choice,
-                                         wd_models, joy_models, llama_models, qwen_models, minicpm_models,
+                                         wd_models, joy_models, llama_models,
+                                         qwen_models, minicpm_models, florence_models,
                                          wd_force_use_cpu,
                                          llm_use_cpu, llm_use_patch, llm_dtype, llm_qnt,
                                          load_model_button, unload_model_button])
@@ -661,7 +681,8 @@ def gui():
         unload_model_button.click(fn=caption_unload_models,
                                   outputs=[model_site, huggingface_token,
                                            caption_method, llm_choice,
-                                           wd_models, joy_models, llama_models, qwen_models, minicpm_models,
+                                           wd_models, joy_models, llama_models,
+                                           qwen_models, minicpm_models, florence_models,
                                            wd_force_use_cpu,
                                            llm_use_cpu, llm_use_patch, llm_dtype, llm_qnt,
                                            load_model_button, unload_model_button])

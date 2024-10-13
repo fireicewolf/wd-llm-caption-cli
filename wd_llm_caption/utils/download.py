@@ -88,7 +88,7 @@ def download_models(
             if models_type == "wd":
                 model_name = list(datas.keys())[0] if not args.wd_model_name else args.wd_model_name
                 args.wd_model_name = model_name
-            elif models_type in ["joy", "llama", "qwen", "minicpm"]:
+            elif models_type in ["joy", "llama", "qwen", "minicpm", "florence"]:
                 model_name = list(datas.keys())[0] if not args.llm_model_name else args.llm_model_name
                 args.llm_model_name = model_name
             else:
@@ -241,5 +241,5 @@ def download_models(
             return llm_path, llm_patch_path
         else:
             return llm_path,
-    elif models_type in ["qwen", "minicpm"]:
+    elif models_type in ["qwen", "minicpm", "florence"]:
         return Path(os.path.dirname(models_path[0])),

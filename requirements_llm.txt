@@ -3,4 +3,5 @@ bitsandbytes==0.44.1
 peft==0.13.2
 sentencepiece==0.2.0
 transformers==4.45.2
+timm==1.0.9
 -r requirements.txt
