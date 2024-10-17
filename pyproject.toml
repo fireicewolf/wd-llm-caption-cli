@@ -67,7 +67,7 @@ classifiers = [
 dependencies = [
     "numpy>=1.26.4,<2.0.0",
     "opencv-python-headless==4.10.0.84",
-    "pillow==10.4.0",
+    "pillow==11.0.0",
     "requests==2.32.3",
     "tqdm==4.66.5",
     "accelerate>=0.34.2",
@@ -79,9 +79,9 @@ dependencies = [
     "torch>=2.1.0",
     "onnx==1.17.0",
     "onnxruntime==1.19.2",
-    "huggingface_hub>=0.25.1",
-    "modelscope>=1.18.1",
-    "gradio>=5.0.2"
+    "huggingface_hub>=0.25.2",
+    "modelscope>=1.19.0",
+    "gradio>=5.1.0"
 ]
 
 [project.urls]

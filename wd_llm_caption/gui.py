@@ -235,8 +235,10 @@ def gui():
         def llm_choice_update_visibility(caption_method_radio, llm_choice_radio):
             joy_model_visible = gr.update(
                 visible=True if "LLM" in caption_method_radio and llm_choice_radio == "Joy" else False)
-            llama_use_patch_visible = llama_model_visible = gr.update(
+            llama_model_visible = gr.update(
                 visible=True if "LLM" in caption_method_radio and llm_choice_radio == "Llama" else False)
+            llama_use_patch_visible = gr.update(
+                visible=True if "LLM" in caption_method_radio and llm_choice_radio in ["Llama", "joy"] else False)
             qwen_model_visible = gr.update(
                 visible=True if "LLM" in caption_method_radio and llm_choice_radio == "Qwen" else False)
             minicpm_model_visible = gr.update(

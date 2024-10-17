@@ -408,7 +408,7 @@ class Caption:
         # Unload models
         if self.use_wd:
             self.my_tagger.unload_model()
-        if self.use_joy or self.use_llama or self.use_qwen:
+        if self.use_joy or self.use_llama or self.use_qwen or self.use_minicpm or self.use_florence:
             self.my_llm.unload_model()
 
 
