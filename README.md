@@ -12,8 +12,9 @@ This tool can make a caption with danbooru style tags or a nature language descr
 
 ### New Changes:
 
-#### 2024.10.13: Add Florence2 Support. Now LLM will use own default generate params while `--llm_temperature` and
-`--llm_max_tokens` are 0.
+#### 2024.10.18: Add Joy Caption Alpha One, Joy-Caption Alpha Two, Joy-Caption Alpha Two Llava Support. GUI support Joy formated prompt inputs (Only for Joy-Caption Alpha Two, Joy-Caption Alpha Two Llava).
+
+#### 2024.10.13: Add Florence2 Support. Now LLM will use own default generate params while `--llm_temperature` and `--llm_max_tokens` are 0.
 
 #### 2024.10.11: GUI using Gradio 5 now. Add Mini-CPM V2.6 Support.
 
@@ -23,7 +24,7 @@ This tool can make a caption with danbooru style tags or a nature language descr
 # Install torch base on your GPU driver. e.g.
 pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cu124
 # Install via pip from pypi
-pip install wd_llm_caption
+pip install wd-llm-caption
 # For CUDA 11.8
 pip install -U -r requirements_onnx_cu118.txt
 # For CUDA 12.X

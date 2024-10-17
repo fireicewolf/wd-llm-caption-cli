@@ -8,7 +8,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from .utils.download import download_models
-from .utils.image import get_image_paths, image_process, image_process_image, image_process_gbr
+from .utils.image import get_image_paths
 from .utils.inference import DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_PROMPT_WITHOUT_WD, DEFAULT_USER_PROMPT_WITH_WD
 from .utils.inference import get_caption_file_path, LLM, Tagger
 from .utils.logger import Logger, print_title
@@ -294,11 +294,8 @@ class Caption:
 
                         if not (args.skip_exists and os.path.isfile(wd_caption_file)):
                             # WD Caption
-                            wd_image = image_process(image, self.my_tagger.model_shape_size)
-                            self.my_logger.debug(f"Resized image shape: {wd_image.shape}")
-                            wd_image = image_process_gbr(wd_image)
                             tag_text, rating_tag_text, character_tag_text, general_tag_text = self.my_tagger.get_tags(
-                                image=wd_image
+                                image=image
                             )
 
                             if not (args.not_overwrite and os.path.isfile(wd_caption_file)):
@@ -323,13 +320,9 @@ class Caption:
                                                    f'Skip this caption.')
 
                         if not (args.skip_exists and os.path.isfile(llm_caption_file)):
-                            # LLM
-                            llm_image = image_process(image, args.image_size)
-                            self.my_logger.debug(f"Resized image shape: {llm_image.shape}")
-                            llm_image = image_process_image(llm_image)
                             # LLM Caption
                             caption = self.my_llm.get_caption(
-                                image=llm_image,
+                                image=image,
                                 system_prompt=str(args.llm_system_prompt),
                                 user_prompt=str(args.llm_user_prompt).format(wd_tags=tag_text),
                                 temperature=args.llm_temperature,
@@ -408,7 +401,7 @@ class Caption:
         # Unload models
         if self.use_wd:
             self.my_tagger.unload_model()
-        if self.use_joy or self.use_llama or self.use_qwen:
+        if self.use_joy or self.use_llama or self.use_qwen or self.use_minicpm or self.use_florence:
             self.my_llm.unload_model()
 
 
