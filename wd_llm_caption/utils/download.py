@@ -75,7 +75,7 @@ def download_models(
         args: argparse.Namespace,
         config_file: Path,
         models_save_path: Path,
-) -> tuple[Path] | tuple[Path, Path] | tuple[Path, Path, Path]:
+) -> tuple[Path] | tuple[Path, Path] | tuple[Path, Path, Path] | tuple[Path, Path, Path, Path]:
     if os.path.isfile(config_file):
         logger.info(f'Using config: {str(config_file)}')
     else:
@@ -108,6 +108,10 @@ def download_models(
         args.download_method = 'sdk'
     else:
         logger.info(f'Models will be stored in {str(models_save_path)}.')
+
+    if args.llm_model_name in ["Joy-Caption-Alpha-One", "Joy-Caption-Alpha-Two"]:
+        logger.warning(f"{args.llm_model_name} will force using llm patch, auto changed `llm_patch` to `True`!")
+        args.llm_patch = True
 
     def download_choice(
             args: argparse.Namespace,
@@ -157,8 +161,9 @@ def download_models(
             if sub_model_name == "patch" and not args.llm_patch:
                 logger.warning(f"Found LLM patch, but llm_patch not enabled, won't download it.")
                 continue
-            if models_type == "joy" and sub_model_name == "llm" and args.llm_patch:
-                logger.warning(f"LLM patch Enabled, replace LLM to patched version.")
+            if models_type == "joy" and args.llm_model_name == "Joy-Caption-Pre-Alpha" \
+                    and sub_model_name == "llm" and args.llm_patch:
+                logger.warning(f"LLM patch Enabled, will replace LLM to patched version.")
                 continue
             sub_model_path = ""
 
@@ -229,11 +234,22 @@ def download_models(
         else:
             wd_tags_csv_path = Path(os.path.join(models_path, "tags-selected.csv"))
         return wd_model_path, wd_tags_csv_path
+
     elif models_type == "joy":
-        image_adapter_path = Path(models_path[0])
-        clip_path = Path(os.path.dirname(models_path[1]))
-        llm_path = Path(os.path.dirname(models_path[2]))
-        return image_adapter_path, clip_path, llm_path
+        if args.llm_model_name == "Joy-Caption-Alpha-Two-Llava":
+            return Path(os.path.dirname(models_path[0])),
+        elif args.llm_patch:
+            image_adapter_path = Path(os.path.dirname(models_path[0]))
+            clip_path = Path(os.path.dirname(models_path[1]))
+            llm_path = Path(os.path.dirname(models_path[2]))
+            llm_patch_path = Path(os.path.dirname(models_path[3]))
+            return image_adapter_path, clip_path, llm_path, llm_patch_path
+        else:
+            image_adapter_path = Path(os.path.dirname(models_path[0]))
+            clip_path = Path(os.path.dirname(models_path[1]))
+            llm_path = Path(os.path.dirname(models_path[2]))
+            return image_adapter_path, clip_path, llm_path
+
     elif models_type == "llama":
         llm_path = Path(os.path.dirname(models_path[0]))
         if args.llm_patch:
@@ -241,5 +257,6 @@ def download_models(
             return llm_path, llm_patch_path
         else:
             return llm_path,
+
     elif models_type in ["qwen", "minicpm", "florence"]:
         return Path(os.path.dirname(models_path[0])),

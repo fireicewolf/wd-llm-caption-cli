@@ -1,1 +1,1 @@
-modelscope==1.18.1
+modelscope>=1.19.0

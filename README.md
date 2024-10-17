@@ -1,9 +1,11 @@
 # WD LLM Caption Cli
 
-A Python base cli tool for caption images
+A Python base cli tool and a simple gradio GUI for caption images
 with [WD series](https://huggingface.co/SmilingWolf), [joy-caption-pre-alpha](https://huggingface.co/spaces/fancyfeast/joy-caption-pre-alpha), [LLama3.2 Vision Instruct](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision-Instruct),
 [Qwen2 VL Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct), [Mini-CPM V2.6](https://huggingface.co/openbmb/MiniCPM-V-2_6)
-and [Florence-2](https://huggingface.co/microsoft/Florence-2-large)models.
+and [Florence-2](https://huggingface.co/microsoft/Florence-2-large) models.
+
+<img alt="DEMO_her.jpg" src="DEMO/DEMO_GUI.png" width="700"/>
 
 ## Introduce
 
@@ -12,18 +14,23 @@ This tool can make a caption with danbooru style tags or a nature language descr
 
 ### New Changes:
 
-#### 2024.10.13: Add Florence2 Support. Now LLM will use own default generate params while `--llm_temperature` and
-`--llm_max_tokens` are 0.
+2024.10.19: Add option to save WD tags and LLM Captions in one file.(Only support CLI mode or GUI batch mode.)
 
-#### 2024.10.11: GUI using Gradio 5 now. Add Mini-CPM V2.6 Support.
+2024.10.18: Add Joy Caption Alpha One, Joy-Caption Alpha Two, Joy-Caption Alpha Two Llava Support.  
+GUI support Joy formated prompt inputs (Only for Joy-Caption Alpha Two, Joy-Caption Alpha Two Llava).
 
-#### 2024.10.09: Build in wheel, now you install this repo from pypi.
+2024.10.13: Add Florence2 Support.  
+Now LLM will use own default generate params while `--llm_temperature` and `--llm_max_tokens` are 0.
+
+2024.10.11: GUI using Gradio 5 now. Add Mini-CPM V2.6 Support.
+
+2024.10.09: Build in wheel, now you can install this repo from pypi.
 
 ```shell
 # Install torch base on your GPU driver. e.g.
-pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cu124
+pip install torch==2.5.0 --index-url https://download.pytorch.org/whl/cu124
 # Install via pip from pypi
-pip install wd_llm_caption
+pip install wd-llm-caption
 # For CUDA 11.8
 pip install -U -r requirements_onnx_cu118.txt
 # For CUDA 12.X
@@ -34,15 +41,13 @@ wd-llm-caption --data_path your_data_path
 wd-llm-caption-gui
 ```
 
-#### 2024.10.04: Add Qwen2 VL support.
+2024.10.04: Add Qwen2 VL support.
 
-#### 2024.09.30: A simple gui run through gradio now😊
-
-<img alt="DEMO_her.jpg" src="DEMO/DEMO_GUI.png" width="300"/>
+2024.09.30: A simple gui run through gradio now😊
 
 ## Example
 
-<img alt="DEMO_her.jpg" src="DEMO/DEMO_her.jpg" width="300" height="400"/>
+<img alt="DEMO_her.jpg" src="DEMO/DEMO_her.jpg" width="600" height="800"/>
 
 ### Standalone Inference
 
@@ -167,12 +172,16 @@ place).
 
 ### Joy Caption models
 
-|               Model               |                                 Hugging Face Link                                 |                                      ModelScope Link                                       |
-|:---------------------------------:|:---------------------------------------------------------------------------------:|:------------------------------------------------------------------------------------------:|
-|       joy-caption-pre-alpha       |  [Hugging Face](https://huggingface.co/spaces/fancyfeast/joy-caption-pre-alpha)   |      [ModelScope](https://www.modelscope.cn/models/fireicewolf/joy-caption-pre-alpha)      |
-| siglip-so400m-patch14-384(Google) |      [Hugging Face](https://huggingface.co/google/siglip-so400m-patch14-384)      |    [ModelScope](https://www.modelscope.cn/models/fireicewolf/siglip-so400m-patch14-384)    |
-|         Meta-Llama-3.1-8B         |        [Hugging Face](https://huggingface.co/meta-llama/Meta-Llama-3.1-8B)        |        [ModelScope](https://www.modelscope.cn/models/fireicewolf/Meta-Llama-3.1-8B)        |
-|  Llama-3.1-8B-Lexi-Uncensored-V2  | [Hugging Face](https://huggingface.co/Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2) | [ModelScope](https://www.modelscope.cn/models/fireicewolf/Llama-3.1-8B-Lexi-Uncensored-V2) |
+|               Model                |                                   Hugging Face Link                                   |                                        ModelScope Link                                         |
+|:----------------------------------:|:-------------------------------------------------------------------------------------:|:----------------------------------------------------------------------------------------------:|
+|       joy-caption-pre-alpha        |    [Hugging Face](https://huggingface.co/spaces/fancyfeast/joy-caption-pre-alpha)     |        [ModelScope](https://www.modelscope.cn/models/fireicewolf/joy-caption-pre-alpha)        |
+|       Joy-Caption-Alpha-One        |    [Hugging Face](https://huggingface.co/spaces/fancyfeast/joy-caption-alpha-one)     |        [ModelScope](https://www.modelscope.cn/models/fireicewolf/joy-caption-alpha-one)        |
+|       Joy-Caption-Alpha-Two        |    [Hugging Face](https://huggingface.co/spaces/fancyfeast/joy-caption-alpha-two)     |        [ModelScope](https://www.modelscope.cn/models/fireicewolf/joy-caption-alpha-two)        |
+|    Joy-Caption-Alpha-Two-Llava     | [Hugging Face](https://huggingface.co/fancyfeast/llama-joycaption-alpha-two-hf-llava) | [ModelScope](https://www.modelscope.cn/models/fireicewolf/llama-joycaption-alpha-two-hf-llava) |
+| siglip-so400m-patch14-384(Google)  |        [Hugging Face](https://huggingface.co/google/siglip-so400m-patch14-384)        |      [ModelScope](https://www.modelscope.cn/models/fireicewolf/siglip-so400m-patch14-384)      |
+|         Meta-Llama-3.1-8B          |          [Hugging Face](https://huggingface.co/meta-llama/Meta-Llama-3.1-8B)          |          [ModelScope](https://www.modelscope.cn/models/fireicewolf/Meta-Llama-3.1-8B)          |
+| unsloth/Meta-Llama-3.1-8B-Instruct |       [Hugging Face](https://huggingface.co/unsloth/Meta-Llama-3.1-8B-Instruct)       | [ModelScope](https://www.modelscope.cn/models/fireicewolf/unsloth-Meta-Llama-3.1-8B-Instruct)  |
+|  Llama-3.1-8B-Lexi-Uncensored-V2   |   [Hugging Face](https://huggingface.co/Orenguteng/Llama-3.1-8B-Lexi-Uncensored-V2)   |   [ModelScope](https://www.modelscope.cn/models/fireicewolf/Llama-3.1-8B-Lexi-Uncensored-V2)   |
 
 ### Llama 3.2 Vision Instruct models
 
@@ -221,7 +230,7 @@ python -m venv .venv
 
 # Install torch
 # Install torch base on your GPU driver. e.g.
-pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cu124
+pip install torch==2.5.0 --index-url https://download.pytorch.org/whl/cu124
  
 # Base dependencies, models for inference will download via python request libs.
 # For WD Caption
@@ -376,6 +385,19 @@ if `queue`, all images will caption with wd models first,
 then caption all of them with joy models while wd captions in joy user prompt.
 default is `sync`.
 
+`--caption_extension`
+
+extension of caption file, default is `.txt`.
+If `caption_method` not `wd+llm`, it will be wd or llm caption file extension.
+
+`--save_caption_together`
+
+Save WD tags and LLM captions in one file.
+
+`--save_caption_together_seperator`
+
+Seperator between WD and LLM captions, if they are saved in one file.
+
 `--image_size`
 
 resize image to suitable, default is `1024`.
@@ -481,7 +503,7 @@ load joy models use cpu.
 
 `--llm_llm_dtype`
 
-choice joy llm load dtype[`auto`, `fp16`, `bf16", `fp32`], default is `auto`.
+choice joy llm load dtype[`fp16`, `bf16", `fp32`], default is `fp16`.
 
 `--llm_llm_qnt`
 
@@ -489,7 +511,7 @@ Enable quantization for joy llm [`none`,`4bit`, `8bit`]. default is `none`.
 
 `--llm_caption_extension`
 
-extension of caption file, default is `.txt`
+extension of caption file, default is `.llmcaption`
 
 `--llm_read_wd_caption`
 
@@ -516,7 +538,7 @@ max tokens for LLM model output, default is `0`, means use llm own default value
 ## Credits
 
 Base
-on [SmilingWolf/wd-tagger](https://huggingface.co/spaces/SmilingWolf/wd-tagger/blob/main/app.py), [joy-caption-pre-alpha](https://huggingface.co/spaces/fancyfeast/joy-caption-pre-alpha), [meta-llama/Llama-3.2-11B-Vision-Instruct](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision-Instruct),  
-[Qwen/Qwen2-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct)
-and [Mini-CPM V2.6](https://huggingface.co/openbmb/MiniCPM-V-2_6)
+on [SmilingWolf/wd-tagger models](https://huggingface.co/spaces/SmilingWolf/wd-tagger/blob/main/app.py), [fancyfeast/joy-caption models](https://huggingface.co/fancyfeast), [meta-llama/Llama-3.2-11B-Vision-Instruct](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision-Instruct),  
+[Qwen/Qwen2-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct), [openbmb/Mini-CPM V2.6](https://huggingface.co/openbmb/MiniCPM-V-2_6)
+and [microsoft/florence2](https://huggingface.co/collections/microsoft/florence-6669f44df0d87d9c3bfb76de).
 Without their works(👏👏), this repo won't exist.

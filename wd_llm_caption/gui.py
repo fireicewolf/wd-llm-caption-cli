@@ -8,7 +8,6 @@ from PIL import Image
 
 from . import caption
 from .utils import inference
-from .utils.image import image_process, image_process_gbr, image_process_image
 from .utils.logger import print_title
 
 WD_CONFIG = os.path.join(os.path.dirname(__file__), "configs", "default_wd.json")
@@ -60,8 +59,7 @@ def gui():
     with (gr.Blocks(title="WD LLM Caption(By DukeG)", theme=theme) as demo):
         with gr.Row(equal_height=True):
             with gr.Column(scale=6):
-                gr.Markdown("## Caption images with WD, Joy Caption, Llama 3.2 Vision Instruct and Qwen2 VL Instruct "
-                            "(By DukeG)")
+                gr.Markdown("## Caption images with WD and LLM models (By DukeG)")
             close_gradio_server_button = gr.Button(value="Close Gradio Server", variant="primary")
 
         with gr.Row():
@@ -113,8 +111,8 @@ def gui():
                         llm_use_patch = gr.Checkbox(label="Use LLM LoRA to avoid censored")
 
                         with gr.Column(min_width=240) as llm_load_settings:
-                            llm_dtype = gr.Radio(label="LLM dtype", choices=["auto", "fp16", "bf16", "fp32"],
-                                                 value="auto",
+                            llm_dtype = gr.Radio(label="LLM dtype", choices=["fp16", "bf16", "fp32"],
+                                                 value="fp16",
                                                  interactive=True)
                             llm_qnt = gr.Radio(label="LLM Quantization", choices=["none", "4bit", "8bit"], value="none",
                                                interactive=True)
@@ -157,25 +155,64 @@ def gui():
                     with gr.Column(min_width=240) as llm_settings:
                         with gr.Group():
                             gr.Markdown("<center>LLM Settings</center>")
-                        llm_caption_extension = gr.Textbox(label="extension of LLM caption file", value=".txt")
+                        llm_caption_extension = gr.Textbox(label="extension of LLM caption file", value=".llmcaption")
                         llm_read_wd_caption = gr.Checkbox(label="llm will read wd caption for inference")
                         llm_caption_without_wd = gr.Checkbox(label="llm will not read wd caption for inference")
+
+                        with gr.Accordion(label="Joy Formated Prompts", open=False) as joy_formated_prompts:
+                            caption_type = gr.Dropdown(
+                                label="Caption Type",
+                                choices=["Descriptive", "Descriptive (Informal)", "Training Prompt", "MidJourney",
+                                         "Booru tag list", "Booru-like tag list", "Art Critic", "Product Listing",
+                                         "Social Media Post"],
+                                value="Descriptive")
+
+                            caption_length = gr.Dropdown(
+                                label="Caption Length",
+                                choices=["any", "very short", "short", "medium-length", "long", "very long"] +
+                                        [str(i) for i in range(20, 261, 10)],
+                                value="long",
+                            )
+                            with gr.Column(min_width=240) as extra_options_column:
+                                extra_options = gr.CheckboxGroup(
+                                    label="Extra Options",
+                                    choices=[
+                                        "Do NOT include information about people/characters that cannot be changed (like ethnicity, gender, etc), but do still include changeable attributes (like hair style).",
+                                        "Include information about lighting.",
+                                        "Include information about camera angle.",
+                                        "Include information about whether there is a watermark or not.",
+                                        "Include information about whether there are JPEG artifacts or not.",
+                                        "If it is a photo you MUST include information about what camera was likely used and details such as aperture, shutter speed, ISO, etc.",
+                                        "Do NOT include anything sexual; keep it PG.",
+                                        "Do NOT mention the image's resolution.",
+                                        "You MUST include information about the subjective aesthetic quality of the image from low to very high.",
+                                        "Include information on the image's composition style, such as leading lines, rule of thirds, or symmetry.",
+                                        "Do NOT mention any text that is in the image.",
+                                        "Specify the depth of field and whether the background is in focus or blurred.",
+                                        "If applicable, mention the likely use of artificial or natural lighting sources.",
+                                        "Do NOT use any ambiguous language.",
+                                        "Include whether the image is sfw, suggestive, or nsfw.",
+                                        "ONLY describe the most important elements of the image.",
+                                        "If there is a person/character in the image you must refer to them as {name}."
+                                    ])
+
+                                name_input = gr.Textbox(label="Person/Character Name (if applicable)")
+
+                            generate_prompt_button = gr.Button(value="Generate prompts", variant="primary")
 
                         llm_system_prompt = gr.Textbox(label="system prompt for llm caption", lines=7, max_lines=7,
                                                        value=caption.DEFAULT_SYSTEM_PROMPT)
                         llm_user_prompt = gr.Textbox(label="user prompt for llm caption", lines=7, max_lines=7,
                                                      value=caption.DEFAULT_USER_PROMPT_WITH_WD)
 
-                        llm_temperature = gr.Slider(label="temperature for LLM model",
-                                                    minimum=0, maximum=1.0, value=0, step=0.1)
-                        llm_max_tokens = gr.Slider(label="max token for LLM model",
-                                                   minimum=0, maximum=2048, value=0, step=1)
-
-                        with gr.Group():
-                            gr.Markdown("<center>Common Settings</center>")
-                        image_size = gr.Slider(label="Resize image for inference",
-                                               minimum=256, maximum=2048, value=1024, step=1)
-                        auto_unload = gr.Checkbox(label="Auto Unload Models after inference.")
+                        with gr.Accordion(label="Advanced Options", open=False):
+                            llm_temperature = gr.Slider(label="temperature for LLM model",
+                                                        minimum=0, maximum=1.0, value=0, step=0.1)
+                            llm_max_tokens = gr.Slider(label="max token for LLM model",
+                                                       minimum=0, maximum=2048, value=0, step=1)
+                            image_size = gr.Slider(label="Resize image for inference",
+                                                   minimum=256, maximum=2048, value=1024, step=1)
+                            auto_unload = gr.Checkbox(label="Auto Unload Models after inference.")
 
             with gr.Column():
                 with gr.Tab("Single mode"):
@@ -209,8 +246,14 @@ def gui():
                                                   value="sync", interactive=True)
 
                             with gr.Column(min_width=240):
-                                skip_exists = gr.Checkbox(label="Will not caption file if caption exists")
+                                skip_exists = gr.Checkbox(label="Will not caption if caption file exists")
                                 not_overwrite = gr.Checkbox(label="Will not overwrite caption file if exists")
+                        with gr.Column(min_width=240):
+                            caption_extension = gr.Textbox(label="Caption file extension", value=".txt")
+                            save_caption_together = gr.Checkbox(label="Save WD and LLM captions in one file",
+                                                                value=True)
+                            save_caption_together_seperator = gr.Textbox(
+                                label="Seperator between WD tags and LLM captions", value="|")
 
                         batch_process_submit_button = gr.Button(elem_id="batch_process_submit_button",
                                                                 value="Batch Process", variant='primary')
@@ -232,11 +275,14 @@ def gui():
             return run_method_visible, wd_model_visible, wd_force_use_cpu_visible, \
                 llm_use_cpu_visible, wd_settings_visible, llm_load_settings_visible, llm_settings_visible
 
-        def llm_choice_update_visibility(caption_method_radio, llm_choice_radio):
+        def llm_choice_update_visibility(caption_method_radio, llm_choice_radio, joy_models_dropdown):
             joy_model_visible = gr.update(
                 visible=True if "LLM" in caption_method_radio and llm_choice_radio == "Joy" else False)
-            llama_use_patch_visible = llama_model_visible = gr.update(
+            llama_model_visible = gr.update(
                 visible=True if "LLM" in caption_method_radio and llm_choice_radio == "Llama" else False)
+            llama_use_patch_visible = gr.update(
+                visible=True if "LLM" in caption_method_radio and (llm_choice_radio == "Llama" or (
+                        llm_choice_radio == "Joy" and joy_models_dropdown == "Joy-Caption-Pre-Alpha")) else False)
             qwen_model_visible = gr.update(
                 visible=True if "LLM" in caption_method_radio and llm_choice_radio == "Qwen" else False)
             minicpm_model_visible = gr.update(
@@ -247,15 +293,30 @@ def gui():
             return joy_model_visible, llama_model_visible, llama_use_patch_visible, \
                 qwen_model_visible, minicpm_model_visible, florence_model_visible
 
+        def joy_formated_prompts_visibility(llm_choice_radio, joy_models_dropdown):
+            joy_formated_prompts_visible = gr.update(
+                visible=True if llm_choice_radio == "Joy" and joy_models_dropdown != "Joy-Caption-Pre-Alpha" else False)
+            extra_options_visible = gr.update(
+                visible=True if llm_choice_radio == "Joy" and joy_models_dropdown in ["Joy-Caption-Alpha-Two-Llava",
+                                                                                      "Joy-Caption-Alpha-Two"] else False)
+            return joy_formated_prompts_visible, extra_options_visible
+
         caption_method.change(fn=caption_method_update_visibility, inputs=caption_method,
                               outputs=[run_method, wd_models, wd_force_use_cpu, llm_use_cpu,
                                        wd_settings, llm_load_settings, llm_settings])
-        caption_method.change(fn=llm_choice_update_visibility, inputs=[caption_method, llm_choice],
+        caption_method.change(fn=llm_choice_update_visibility, inputs=[caption_method, llm_choice, joy_models],
                               outputs=[joy_models, llama_models, llm_use_patch,
                                        qwen_models, minicpm_models, florence_models])
-        llm_choice.change(fn=llm_choice_update_visibility, inputs=[caption_method, llm_choice],
+        llm_choice.change(fn=llm_choice_update_visibility, inputs=[caption_method, llm_choice, joy_models],
                           outputs=[joy_models, llama_models, llm_use_patch,
                                    qwen_models, minicpm_models, florence_models])
+        llm_choice.change(fn=joy_formated_prompts_visibility, inputs=[llm_choice, joy_models],
+                          outputs=[joy_formated_prompts, extra_options_column])
+        joy_models.change(fn=llm_choice_update_visibility, inputs=[caption_method, llm_choice, joy_models],
+                          outputs=[joy_models, llama_models, llm_use_patch,
+                                   qwen_models, minicpm_models, florence_models])
+        joy_models.change(fn=joy_formated_prompts_visibility, inputs=[llm_choice, joy_models],
+                          outputs=[joy_formated_prompts, extra_options_column])
 
         def llm_use_patch_visibility(llama_model_dropdown):
             return gr.update(
@@ -276,9 +337,98 @@ def gui():
                 llm_user_prompt_change = gr.update(value=llm_user_prompt_textbox)
             return llm_user_prompt_change
 
+        def build_joy_user_prompt(caption_method_value: str, joy_models_value: str, llm_read_wd_caption_value: bool,
+                                  caption_type_value: str, caption_length_value: str,
+                                  extra_options_value: list[str], name_input_value: str):
+            caption_type_map = {
+                "Descriptive": [
+                    "Write a descriptive caption for this image in a formal tone.",
+                    "Write a descriptive caption for this image in a formal tone within {word_count} words.",
+                    "Write a {length} descriptive caption for this image in a formal tone.",
+                ],
+                "Descriptive (Informal)": [
+                    "Write a descriptive caption for this image in a casual tone.",
+                    "Write a descriptive caption for this image in a casual tone within {word_count} words.",
+                    "Write a {length} descriptive caption for this image in a casual tone.",
+                ],
+                "Training Prompt": [
+                    "Write a stable diffusion prompt for this image.",
+                    "Write a stable diffusion prompt for this image within {word_count} words.",
+                    "Write a {length} stable diffusion prompt for this image.",
+                ],
+                "MidJourney": [
+                    "Write a MidJourney prompt for this image.",
+                    "Write a MidJourney prompt for this image within {word_count} words.",
+                    "Write a {length} MidJourney prompt for this image.",
+                ],
+                "Booru tag list": [
+                    "Write a list of Booru tags for this image.",
+                    "Write a list of Booru tags for this image within {word_count} words.",
+                    "Write a {length} list of Booru tags for this image.",
+                ],
+                "Booru-like tag list": [
+                    "Write a list of Booru-like tags for this image.",
+                    "Write a list of Booru-like tags for this image within {word_count} words.",
+                    "Write a {length} list of Booru-like tags for this image.",
+                ],
+                "Art Critic": [
+                    "Analyze this image like an art critic would with information about its composition, style, symbolism, the use of color, light, any artistic movement it might belong to, etc.",
+                    "Analyze this image like an art critic would with information about its composition, style, symbolism, the use of color, light, any artistic movement it might belong to, etc. Keep it within {word_count} words.",
+                    "Analyze this image like an art critic would with information about its composition, style, symbolism, the use of color, light, any artistic movement it might belong to, etc. Keep it {length}.",
+                ],
+                "Product Listing": [
+                    "Write a caption for this image as though it were a product listing.",
+                    "Write a caption for this image as though it were a product listing. Keep it under {word_count} words.",
+                    "Write a {length} caption for this image as though it were a product listing.",
+                ],
+                "Social Media Post": [
+                    "Write a caption for this image as if it were being used for a social media post.",
+                    "Write a caption for this image as if it were being used for a social media post. Limit the caption to {word_count} words.",
+                    "Write a {length} caption for this image as if it were being used for a social media post.",
+                ],
+            }
+
+            length = None if caption_length_value == "any" else caption_length_value
+
+            if isinstance(length, str):
+                try:
+                    length = int(length)
+                except ValueError:
+                    pass
+
+            # Build prompt
+            if length is None:
+                map_idx = 0
+            elif isinstance(length, int):
+                map_idx = 1
+            elif isinstance(length, str):
+                map_idx = 2
+            else:
+                raise ValueError(f"Invalid caption length: {length}")
+
+            prompt_str = ""
+            if caption_method_value == "WD+LLM" or llm_read_wd_caption_value:
+                prompt_str = "Refer to the following tags: {wd_tags}. "
+
+            prompt_str = prompt_str + caption_type_map[caption_type_value][map_idx]
+            # Add extra options
+            if joy_models_value in ["Joy-Caption-Alpha-Two-Llava", "Joy-Caption-Alpha-Two"] and \
+                    len(extra_options_value) > 0:
+                prompt_str += " " + " ".join(extra_options_value)
+            # Add name, length, word_count
+            system_prompt = "You are a helpful image captioner."
+            user_prompt_str = prompt_str.format(wd_tags="{wd_tags}", name=name_input_value, length=caption_length_value,
+                                                word_count=caption_length_value)
+            return system_prompt, user_prompt_str.strip()
+
         caption_method.change(fn=llm_user_prompt_default,
                               inputs=[caption_method, llm_read_wd_caption, llm_user_prompt],
                               outputs=llm_user_prompt)
+
+        generate_prompt_button.click(fn=build_joy_user_prompt,
+                                     inputs=[caption_method, joy_models, llm_read_wd_caption,
+                                             caption_type, caption_length, extra_options, name_input],
+                                     outputs=[llm_system_prompt, llm_user_prompt])
 
         def use_wd(check_caption_method):
             return True if check_caption_method in ["wd", "wd+llm"] else False
@@ -364,7 +514,8 @@ def gui():
                                        auto_unload,
                                        input_image]
 
-        batch_inference_input_args = [run_method,
+        batch_inference_input_args = [batch_process_submit_button,
+                                      run_method,
                                       wd_remove_underscore,
                                       wd_threshold,
                                       wd_general_threshold,
@@ -391,7 +542,10 @@ def gui():
                                       is_recursive,
                                       custom_caption_save_path,
                                       skip_exists,
-                                      not_overwrite]
+                                      not_overwrite,
+                                      caption_extension,
+                                      save_caption_together,
+                                      save_caption_together_seperator]
 
         def caption_models_load(
                 model_site_value,
@@ -521,8 +675,8 @@ def gui():
             args.wd_tag_replacement = str(wd_tag_replacement_value)
 
             args.llm_caption_extension = str(llm_caption_extension_value)
-            args.llm_read_wd_caption = str(llm_read_wd_caption_value)
-            args.llm_caption_without_wd = str(llm_caption_without_wd_value)
+            args.llm_read_wd_caption = bool(llm_read_wd_caption_value)
+            args.llm_caption_without_wd = bool(llm_caption_without_wd_value)
             args.llm_system_prompt = str(llm_system_prompt_value)
             args.llm_user_prompt = str(llm_user_prompt_value)
             args.llm_temperature = float(llm_temperature_value)
@@ -535,14 +689,12 @@ def gui():
             image = Image.open(input_image_value)
             tag_text = ""
             caption_text = ""
-            get_caption_fn.my_logger.debug(f"Input inmage: {args.data_path}.")
+            get_caption_fn.my_logger.debug(f"Input image: {args.data_path}.")
             if use_wd(args.caption_method):
                 get_caption_fn.my_logger.debug(f"Tagging with WD: {args.wd_model_name}.")
-                wd_image = image_process(image, get_caption_fn.my_tagger.model_shape_size)
-                wd_image = image_process_gbr(wd_image)
-
+                # WD tag
                 tag_text, rating_tag_text, character_tag_text, general_tag_text = get_caption_fn.my_tagger.get_tags(
-                    image=wd_image)
+                    image=image)
                 if rating_tag_text:
                     get_caption_fn.my_logger.debug(f"WD Rating tags: {rating_tag_text}")
                 if character_tag_text:
@@ -556,23 +708,24 @@ def gui():
                     or use_minicpm(args.caption_method, args.llm_choice) \
                     or use_florence(args.caption_method, args.llm_choice):
                 get_caption_fn.my_logger.debug(f"Caption with LLM: {args.llm_model_name}.")
-                llm_image = image_process(image, args.image_size)
-                llm_image = image_process_image(llm_image)
+                # LLM Caption
                 caption_text = get_caption_fn.my_llm.get_caption(
-                    image=llm_image,
+                    image=image,
                     system_prompt=str(args.llm_system_prompt),
-                    user_prompt=str(args.llm_user_prompt).format(wd_tags=tag_text)
-                    if args.llm_read_wd_caption else str(args.llm_user_prompt),
+                    user_prompt=str(args.llm_user_prompt).format(wd_tags=tag_text) if tag_text else \
+                        str(args.llm_user_prompt),
                     temperature=args.llm_temperature,
                     max_new_tokens=args.llm_max_tokens
                 )
                 get_caption_fn.my_logger.info(f"LLM Caption content: {caption_text}")
             gr.Info(f"Inference end in {time.monotonic() - start_time:.1f}s.")
+            get_caption_fn.my_logger.info(f"Inference end in {time.monotonic() - start_time:.1f}s.")
             if auto_unload_value:
                 caption_unload_models()
             return tag_text, caption_text
 
-        def caption_batch_inference(run_method_value,
+        def caption_batch_inference(batch_process_submit_button_value,
+                                    run_method_value,
                                     wd_remove_underscore_value,
                                     wd_threshold_value,
                                     wd_general_threshold_value,
@@ -599,57 +752,68 @@ def gui():
                                     recursive_value,
                                     custom_caption_save_path_value,
                                     skip_exists_value,
-                                    not_overwrite_value):
-            if not IS_MODEL_LOAD:
-                raise gr.Error("Models not loaded!")
-            args, get_caption_fn = ARGS, CAPTION_FN
+                                    not_overwrite_value,
+                                    caption_extension_value,
+                                    save_caption_together_value,
+                                    save_caption_together_seperator_value):
+            if batch_process_submit_button_value == "Batch Process":
+                if not IS_MODEL_LOAD:
+                    raise gr.Error("Models not loaded!")
+                args, get_caption_fn = ARGS, CAPTION_FN
 
-            if not input_dir_value:
-                raise gr.Error("None input image/dir!")
+                if not input_dir_value:
+                    raise gr.Error("None input image/dir!")
 
-            args.data_path = str()
+                args.data_path = str()
 
-            args.wd_remove_underscore = bool(wd_remove_underscore_value)
-            args.wd_threshold = float(wd_threshold_value)
-            args.wd_general_threshold = float(wd_general_threshold_value)
-            args.wd_character_threshold = float(wd_character_threshold_value)
-            args.wd_add_rating_tags_to_first = bool(wd_add_rating_tags_to_first_value)
-            args.wd_add_rating_tags_to_last = bool(wd_add_rating_tags_to_last_value)
-            args.wd_character_tags_first = bool(wd_character_tags_first_value)
-            args.wd_character_tag_expand = bool(wd_character_tag_expand_value)
-            args.wd_undesired_tags = str(wd_undesired_tags_value)
-            args.wd_always_first_tags = str(wd_always_first_tags_value)
-            args.wd_caption_extension = str(wd_caption_extension_value)
-            args.wd_caption_separator = str(wd_caption_separator_value)
-            args.wd_tag_replacement = str(wd_tag_replacement_value)
+                args.wd_remove_underscore = bool(wd_remove_underscore_value)
+                args.wd_threshold = float(wd_threshold_value)
+                args.wd_general_threshold = float(wd_general_threshold_value)
+                args.wd_character_threshold = float(wd_character_threshold_value)
+                args.wd_add_rating_tags_to_first = bool(wd_add_rating_tags_to_first_value)
+                args.wd_add_rating_tags_to_last = bool(wd_add_rating_tags_to_last_value)
+                args.wd_character_tags_first = bool(wd_character_tags_first_value)
+                args.wd_character_tag_expand = bool(wd_character_tag_expand_value)
+                args.wd_undesired_tags = str(wd_undesired_tags_value)
+                args.wd_always_first_tags = str(wd_always_first_tags_value)
+                args.wd_caption_extension = str(wd_caption_extension_value)
+                args.wd_caption_separator = str(wd_caption_separator_value)
+                args.wd_tag_replacement = str(wd_tag_replacement_value)
 
-            args.llm_caption_extension = str(llm_caption_extension_value)
-            args.llm_read_wd_caption = str(llm_read_wd_caption_value)
-            args.llm_caption_without_wd = str(llm_caption_without_wd_value)
-            args.llm_system_prompt = str(llm_system_prompt_value)
-            args.llm_user_prompt = str(llm_user_prompt_value)
-            args.llm_temperature = float(llm_temperature_value)
-            args.llm_max_tokens = int(llm_max_tokens_value)
+                args.llm_caption_extension = str(llm_caption_extension_value)
+                args.llm_read_wd_caption = bool(llm_read_wd_caption_value)
+                args.llm_caption_without_wd = bool(llm_caption_without_wd_value)
+                args.llm_system_prompt = str(llm_system_prompt_value)
+                args.llm_user_prompt = str(llm_user_prompt_value)
+                args.llm_temperature = float(llm_temperature_value)
+                args.llm_max_tokens = int(llm_max_tokens_value)
 
-            args.image_size = int(image_size_value)
+                args.image_size = int(image_size_value)
 
-            args.data_path = str(input_dir_value)
-            args.run_method = str(run_method_value)
-            args.recursive = bool(recursive_value)
-            args.custom_caption_save_path = str(custom_caption_save_path_value)
-            args.skip_exists = bool(skip_exists_value)
-            args.not_overwrite = bool(not_overwrite_value)
+                args.data_path = str(input_dir_value)
+                args.run_method = str(run_method_value)
+                args.recursive = bool(recursive_value)
+                args.custom_caption_save_path = str(custom_caption_save_path_value)
+                args.skip_exists = bool(skip_exists_value)
+                args.not_overwrite = bool(not_overwrite_value)
+                args.caption_extension = str(caption_extension_value)
+                args.save_caption_together = bool(save_caption_together_value)
+                args.save_caption_together_seperator = str(save_caption_together_seperator_value)
 
-            if args.data_path and not os.path.exists(args.data_path):
-                raise gr.Error(f"{args.data_path} NOT FOUND!!!")
-            if args.custom_caption_save_path and not os.path.exists(args.custom_caption_save_path):
-                raise gr.Error(f"{args.data_path} NOT FOUND!!!")
+                if args.data_path and not os.path.exists(args.data_path):
+                    raise gr.Error(f"{args.data_path} NOT FOUND!!!")
+                if args.custom_caption_save_path and not os.path.exists(args.custom_caption_save_path):
+                    raise gr.Error(f"{args.data_path} NOT FOUND!!!")
 
-            start_time = time.monotonic()
-            get_caption_fn.run_inference(args)
-            gr.Info(f"Inference end in {time.monotonic() - start_time:.1f}s.")
-            if auto_unload_value:
-                caption_unload_models()
+                start_time = time.monotonic()
+                get_caption_fn.run_inference(args)
+                gr.Info(f"Inference end in {time.monotonic() - start_time:.1f}s.")
+                if auto_unload_value:
+                    caption_unload_models()
+
+                return gr.update(value="Done!", variant='stop')
+            else:
+                return gr.update(value="Batch Process", variant='primary')
 
         def caption_unload_models():
             global IS_MODEL_LOAD

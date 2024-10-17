@@ -8,7 +8,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from .utils.download import download_models
-from .utils.image import get_image_paths, image_process, image_process_image, image_process_gbr
+from .utils.image import get_image_paths
 from .utils.inference import DEFAULT_SYSTEM_PROMPT, DEFAULT_USER_PROMPT_WITHOUT_WD, DEFAULT_USER_PROMPT_WITH_WD
 from .utils.inference import get_caption_file_path, LLM, Tagger
 from .utils.logger import Logger, print_title
@@ -89,7 +89,7 @@ class Caption:
 
     def download_models(
             self,
-            args: argparse.Namespace,
+            args: argparse.Namespace
     ):
         # Set flags
         self.use_wd = True if args.caption_method in ["wd", "wd+llm"] else False
@@ -193,7 +193,7 @@ class Caption:
 
     def load_models(
             self,
-            args: argparse.Namespace,
+            args: argparse.Namespace
     ):
         if self.use_wd:
             # Load wd models
@@ -253,7 +253,7 @@ class Caption:
 
     def run_inference(
             self,
-            args: argparse.Namespace,
+            args: argparse.Namespace
     ):
         start_inference_time = time.monotonic()
         # Inference
@@ -286,19 +286,18 @@ class Caption:
                             data_path=args.data_path,
                             image_path=Path(image_path),
                             custom_caption_save_path=args.custom_caption_save_path,
-                            caption_extension=args.llm_caption_extension
+                            caption_extension=args.llm_caption_extension if args.save_caption_together else
+                            args.caption_extension
                         )
                         # image to pillow
                         image = Image.open(image_path)
                         tag_text = ""
+                        caption = ""
 
                         if not (args.skip_exists and os.path.isfile(wd_caption_file)):
                             # WD Caption
-                            wd_image = image_process(image, self.my_tagger.model_shape_size)
-                            self.my_logger.debug(f"Resized image shape: {wd_image.shape}")
-                            wd_image = image_process_gbr(wd_image)
                             tag_text, rating_tag_text, character_tag_text, general_tag_text = self.my_tagger.get_tags(
-                                image=wd_image
+                                image=image
                             )
 
                             if not (args.not_overwrite and os.path.isfile(wd_caption_file)):
@@ -320,16 +319,12 @@ class Caption:
                         else:
                             self.my_logger.warning(f'`skip_exists` ENABLED!!! '
                                                    f'WD Caption file {wd_caption_file} already exists, '
-                                                   f'Skip this caption.')
+                                                   f'Skip save it!')
 
                         if not (args.skip_exists and os.path.isfile(llm_caption_file)):
-                            # LLM
-                            llm_image = image_process(image, args.image_size)
-                            self.my_logger.debug(f"Resized image shape: {llm_image.shape}")
-                            llm_image = image_process_image(llm_image)
                             # LLM Caption
                             caption = self.my_llm.get_caption(
-                                image=llm_image,
+                                image=image,
                                 system_prompt=str(args.llm_system_prompt),
                                 user_prompt=str(args.llm_user_prompt).format(wd_tags=tag_text),
                                 temperature=args.llm_temperature,
@@ -344,15 +339,49 @@ class Caption:
                                     self.my_logger.debug(f"LLM Caption content: {caption}")
                             else:
                                 self.my_logger.warning(f'`not_overwrite` ENABLED!!! '
-                                                       f'LLM Caption file {llm_caption_file} already exist! '
-                                                       f'Skip this caption.')
+                                                       f'LLM Caption file {llm_caption_file} already exist, '
+                                                       f'skip save it!')
                         else:
                             self.my_logger.warning(f'`skip_exists` ENABLED!!! '
                                                    f'LLM Caption file {llm_caption_file} already exists, '
-                                                   f'Skip this caption.')
+                                                   f'skip save it!')
+
+                        if args.save_caption_together:
+                            together_caption_file = get_caption_file_path(
+                                self.my_logger,
+                                data_path=args.data_path,
+                                image_path=Path(image_path),
+                                custom_caption_save_path=args.custom_caption_save_path,
+                                caption_extension=args.caption_extension
+                            )
+                            self.my_logger.debug(
+                                f"`save_caption_together` Enabled, "
+                                f"will save WD tags and LLM captions in a new file `{together_caption_file}`")
+                            if not (args.skip_exists and os.path.isfile(together_caption_file)):
+                                if not tag_text or not caption:
+                                    self.my_logger.warning(
+                                        "WD tags or LLM Caption is null, skip save them together in one file!")
+                                    pbar.update(1)
+                                    continue
+
+                                if not (args.not_overwrite and os.path.isfile(together_caption_file)):
+                                    with open(together_caption_file, "wt", encoding="utf-8") as f:
+                                        together_caption = f"{tag_text} {args.save_caption_together_seperator} {caption}"
+                                        f.write(together_caption + "\n")
+                                    self.my_logger.debug(f"Together Caption save path: {together_caption_file}")
+                                    self.my_logger.debug(f"Together Caption content: {together_caption}")
+                                else:
+                                    self.my_logger.warning(f'`not_overwrite` ENABLED!!! '
+                                                           f'Together Caption file {together_caption_file} already exist, '
+                                                           f'skip save it!')
+                            else:
+                                self.my_logger.warning(f'`skip_exists` ENABLED!!! '
+                                                       f'LLM Caption file {llm_caption_file} already exists, '
+                                                       f'skip save it!')
 
                     except Exception as e:
                         self.my_logger.error(f"Failed to caption image: {image_path}, skip it.\nerror info: {e}")
+                        pbar.update(1)
                         continue
 
                     pbar.update(1)
@@ -396,10 +425,10 @@ class Caption:
         total_inference_time %= 3600
         minutes = total_inference_time // 60
         seconds = total_inference_time % 60
-        days = f"{days} Day(s) " if days > 0 else ""
-        hours = f"{hours} Hour(s) " if hours > 0 or (days and hours == 0) else ""
-        minutes = f"{minutes} Min(s) " if minutes > 0 or (hours and minutes == 0) else ""
-        seconds = f"{seconds:.1f} Sec(s)"
+        days = f"{days:.0f} Day(s) " if days > 0 else ""
+        hours = f"{hours:.0f} Hour(s) " if hours > 0 or (days and hours == 0) else ""
+        minutes = f"{minutes:.0f} Min(s) " if minutes > 0 or (hours and minutes == 0) else ""
+        seconds = f"{seconds:.2f} Sec(s)"
         self.my_logger.info(f"All work done with in {days}{hours}{minutes}{seconds}.")
 
     def unload_models(
@@ -408,7 +437,7 @@ class Caption:
         # Unload models
         if self.use_wd:
             self.my_tagger.unload_model()
-        if self.use_joy or self.use_llama or self.use_qwen:
+        if self.use_joy or self.use_llama or self.use_qwen or self.use_minicpm or self.use_florence:
             self.my_llm.unload_model()
 
 
@@ -498,6 +527,23 @@ def setup_args() -> argparse.Namespace:
              if queue, all images will caption with wd models first,
              then caption all of them with joy models while wd captions in joy user prompt.
              default is `sync`.'''
+    )
+    caption_args.add_argument(
+        '--caption_extension',
+        type=str,
+        default='.txt',
+        help='extension of caption file, default is `.txt`. '
+             'If `caption_method` not `wd+llm`, it will be wd or llm caption file extension.'
+    )
+    caption_args.add_argument(
+        '--save_caption_together',
+        action='store_true',
+        help='Save WD tags and LLM captions in one file.'
+    )
+    caption_args.add_argument(
+        '--save_caption_together_seperator',
+        default='|',
+        help='Seperator between WD and LLM captions, if they are saved in one file.'
     )
     caption_args.add_argument(
         '--image_size',
@@ -655,9 +701,9 @@ def setup_args() -> argparse.Namespace:
     llm_args.add_argument(
         '--llm_dtype',
         type=str,
-        choices=["auto", "fp16", "bf16", "fp32"],
+        choices=["fp16", "bf16", "fp32"],
         default='fp16',
-        help='choice joy LLM load dtype, default is `auto`.'
+        help='choice joy LLM load dtype, default is `fp16`.'
     )
     llm_args.add_argument(
         '--llm_qnt',
@@ -669,8 +715,8 @@ def setup_args() -> argparse.Namespace:
     llm_args.add_argument(
         '--llm_caption_extension',
         type=str,
-        default='.txt',
-        help='extension of LLM caption file, default is `.txt`'
+        default='.llmcaption',
+        help='extension of LLM caption file, default is `.llmcaption`'
     )
     llm_args.add_argument(
         '--llm_read_wd_caption',
