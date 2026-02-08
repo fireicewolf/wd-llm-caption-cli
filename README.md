@@ -215,7 +215,7 @@ place).
 
 ## Installation
 
-Python 3.10 works fine.
+**⚠️ Python 3.13 is not currently supported. Use Python 3.10, 3.11, or 3.12 instead**
 
 Open a shell terminal and follow below steps:
 
